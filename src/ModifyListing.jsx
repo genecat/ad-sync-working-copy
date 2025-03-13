@@ -7,7 +7,6 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
 );
 
-// Define available frames (same as in CreateListingFinal.jsx)
 const availableFrames = [
   { id: "frame1", size: "300x250" },
   { id: "frame2", size: "728x90" },
@@ -15,9 +14,6 @@ const availableFrames = [
   { id: "frame4", size: "300x90" },
   { id: "frame5", size: "480x640" },
 ];
-
-// Add campaign ID for the new campaign
-const CAMPAIGN_ID = "789bb7a8-8570-4389-8fd8-f009c301faa3";
 
 const ModifyListing = ({ session }) => {
   const { listingId } = useParams();
@@ -27,12 +23,11 @@ const ModifyListing = ({ session }) => {
   const [category, setCategory] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [newFrameSize, setNewFrameSize] = useState(availableFrames[0].size); // Default to first frame size
-  const [newFramePrice, setNewFramePrice] = useState(''); // State for new frame price
-  const [embedCode, setEmbedCode] = useState(''); // State for embed code
-  const [selectedFrameToCopy, setSelectedFrameToCopy] = useState('all'); // State to select frame for copying
+  const [newFrameSize, setNewFrameSize] = useState(availableFrames[0].size);
+  const [newFramePrice, setNewFramePrice] = useState('');
+  const [embedCode, setEmbedCode] = useState('');
+  const [selectedFrameToCopy, setSelectedFrameToCopy] = useState('all');
 
-  // Fetch the listing data when the component mounts
   useEffect(() => {
     async function fetchListing() {
       console.log("Fetching listing for ID:", listingId);
@@ -47,7 +42,6 @@ const ModifyListing = ({ session }) => {
       } else if (data) {
         console.log("Fetched listing data:", data);
         setListing(data);
-        // Parse the selected_frames JSON if needed
         let frames = data.selected_frames;
         if (typeof frames === 'string') {
           try {
@@ -59,14 +53,12 @@ const ModifyListing = ({ session }) => {
         }
         setSelectedFrames(frames || {});
         setCategory(data.category || '');
-        // Generate initial embed code
         generateCode();
       }
     }
     fetchListing();
   }, [listingId]);
 
-  // Handle changes in ad frame pricing
   const handleFramePriceChange = (frameKey, newPrice) => {
     setSelectedFrames((prev) => ({
       ...prev,
@@ -75,52 +67,50 @@ const ModifyListing = ({ session }) => {
         pricePerClick: newPrice,
       },
     }));
-    generateCode(); // Regenerate embed code when price changes
+    generateCode();
   };
 
-  // Function to add a new ad frame to the listing
   const addFrame = (size, price) => {
     if (!price) {
       setError('Please enter a price per click for the new frame.');
       return;
     }
-    const frameKey = `frame${Date.now()}`; // Unique key based on timestamp
+    const frameKey = `frame${Date.now()}`;
     setSelectedFrames((prev) => ({
       ...prev,
       [frameKey]: { size, pricePerClick: price },
     }));
-    setNewFramePrice(''); // Reset the price input
-    setError(''); // Clear any error
-    generateCode(); // Regenerate embed code after adding a new frame
+    setNewFramePrice('');
+    setError('');
+    generateCode();
   };
 
-  // Function to remove an ad frame from the listing
   const removeFrame = (frameKey) => {
     setSelectedFrames((prev) => {
       const updated = { ...prev };
       delete updated[frameKey];
       return updated;
     });
-    generateCode(); // Regenerate embed code after removing a frame
+    generateCode();
   };
 
-  // Generate embed code based on selected frames
   const generateCode = () => {
-    console.log("Generating embed code for frames:", selectedFrames); // Debug log
+    console.log("Generating embed code for frames:", selectedFrames);
+    const baseUrl = "https://my-ad-agency.vercel.app";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
     Object.keys(selectedFrames).forEach((frameKey) => {
       const frameData = selectedFrames[frameKey];
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
-      code += `<iframe src="http://localhost:3000/serve-campaign/${CAMPAIGN_ID}" `;
+      code += `<iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n\n`;
     });
     code += "<!-- Ad Exchange Embed Code End -->";
     setEmbedCode(code);
   };
 
-  // Generate code for a specific frame or all frames
   const generateCodeForSelected = () => {
+    const baseUrl = "https://my-ad-agency.vercel.app";
     if (selectedFrameToCopy === 'all') {
       generateCode();
       return;
@@ -131,17 +121,15 @@ const ModifyListing = ({ session }) => {
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
       const code = `<!-- Ad Exchange Embed Code Start -->\n` +
-                   `<iframe src="http://localhost:3000/serve-campaign/${CAMPAIGN_ID}" ` +
+                   `<iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" ` +
                    `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n` +
                    `<!-- Ad Exchange Embed Code End -->`;
       setEmbedCode(code);
     }
   };
 
-  // Handle form submission to update modifiable listing data
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Prepare payload with updated fields (only selected_frames and category)
     const payload = {
       selected_frames: selectedFrames,
       category: category,
@@ -156,9 +144,7 @@ const ModifyListing = ({ session }) => {
     } else {
       setMessage('Listing updated successfully!');
       console.log("Listing updated with payload:", payload);
-      generateCode(); // Regenerate embed code after successful update
-      // Optionally, navigate back to the listings page after a delay:
-      // setTimeout(() => navigate('/listings'), 2000);
+      generateCode();
     }
   };
 
@@ -172,7 +158,6 @@ const ModifyListing = ({ session }) => {
         {message && <p className="text-green-500 mb-4">{message}</p>}
 
         <form onSubmit={handleSubmit}>
-          {/* Allow modification of category */}
           <div className="mb-6">
             <label className="block mb-2 font-semibold">Category:</label>
             <select
@@ -189,7 +174,6 @@ const ModifyListing = ({ session }) => {
             </select>
           </div>
 
-          {/* Ad Frames Modification Section */}
           <div className="mb-6">
             <h2 className="text-xl font-semibold mb-3">Ad Frames</h2>
             {Object.keys(selectedFrames).length > 0 ? (
@@ -297,7 +281,6 @@ const ModifyListing = ({ session }) => {
           </button>
         </form>
 
-        {/* Link back to the Listings page */}
         <div className="mt-6">
           <Link to="/listings" className="text-blue-600 underline">
             Back to Listings

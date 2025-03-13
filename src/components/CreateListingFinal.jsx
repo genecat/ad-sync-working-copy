@@ -19,7 +19,6 @@ const availableFrames = [
 function CreateListingFinal({ session }) {
   console.log("CreateListingFinal loaded");
 
-  // State for creating a new listing
   const [listingDetails, setListingDetails] = useState({
     title: "",
     category: "",
@@ -28,12 +27,9 @@ function CreateListingFinal({ session }) {
   const [selectedFrames, setSelectedFrames] = useState({});
   const [embedCode, setEmbedCode] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
-
-  // State for displaying existing listings
   const [listings, setListings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch all listings for this publisher
   useEffect(() => {
     async function fetchListings() {
       if (!session?.user?.id) {
@@ -48,7 +44,6 @@ function CreateListingFinal({ session }) {
       if (error) {
         console.error("Error fetching listings:", error);
       } else {
-        // Parse selected_frames if it's a string
         const parsedListings = data.map((listing) => {
           if (typeof listing.selected_frames === "string") {
             try {
@@ -67,13 +62,11 @@ function CreateListingFinal({ session }) {
     fetchListings();
   }, [session]);
 
-  // Handle input change in the form
   const handleDetailChange = (e) => {
     const { name, value } = e.target;
     setListingDetails((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Toggle frame selection; when selected, store the dimension and allow price
   const toggleFrame = (frameId) => {
     setSelectedFrames((prev) => {
       if (prev[frameId]) {
@@ -82,25 +75,31 @@ function CreateListingFinal({ session }) {
         return updated;
       }
       const frameInfo = availableFrames.find((f) => f.id === frameId);
-      return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: '' } };
+      return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: "" } };
     });
   };
 
-  // Generate embed code based on selected frames
-  const generateCode = () => {
+  const handlePriceChange = (frameId, value) => {
+    setSelectedFrames((prev) => ({
+      ...prev,
+      [frameId]: { ...prev[frameId], pricePerClick: value },
+    }));
+  };
+
+  const generateCode = (listingId) => {
+    const baseUrl = "https://my-ad-agency.vercel.app";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
     Object.keys(selectedFrames).forEach((frameKey) => {
       const frameData = selectedFrames[frameKey];
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
-      code += `<iframe src="http://localhost:3000/serve-ad/${listingId}?frame=${frameKey}" `;
+      code += `<iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n\n`;
     });
     code += "<!-- Ad Exchange Embed Code End -->";
     setEmbedCode(code);
   };
 
-  // Save the new listing to the database
   const saveListing = async () => {
     if (!session) {
       setSaveMessage("You must be logged in to save a listing.");
@@ -115,16 +114,16 @@ function CreateListingFinal({ session }) {
     };
 
     try {
-      const { data, error } = await supabase.from("listings").insert([payload]);
+      const { data, error } = await supabase.from("listings").insert([payload]).select();
       if (error) throw error;
       setSaveMessage("Listing created successfully!");
       console.log("New listing created:", data);
-      // Clear the create listing form
+      const newListingId = data[0].id; // Capture the new listing ID
       setListingDetails({ title: "", category: "", website: "" });
       setSelectedFrames({});
-      // Add the new listing to the existing listings
       if (data && data[0]) {
         setListings((prev) => [...prev, data[0]]);
+        generateCode(newListingId); // Generate embed code with the new listing ID
       }
     } catch (err) {
       console.error("Error creating listing:", err);
@@ -134,7 +133,6 @@ function CreateListingFinal({ session }) {
 
   return (
     <div className="max-w-4xl mx-auto my-10 px-4 space-y-10">
-      {/* Create Listing (Add) Form Section */}
       <div className="p-8 shadow border border-gray-200 rounded-xl bg-white text-black">
         <h1 className="text-3xl font-bold mb-4">
           Create Listing <span className="text-sm text-gray-500">(Add)</span>
@@ -188,17 +186,35 @@ function CreateListingFinal({ session }) {
           {availableFrames.map((frame) => {
             const isSelected = !!selectedFrames[frame.id];
             return (
-              <div key={frame.id} className="flex items-center">
-                <input
-                  type="checkbox"
-                  id={frame.id}
-                  checked={isSelected}
-                  onChange={() => toggleFrame(frame.id)}
-                  className="mr-2 form-checkbox h-5 w-5 text-blue-500"
-                />
-                <label htmlFor={frame.id} className="mr-2 text-black">
-                  {frame.size}
-                </label>
+              <div key={frame.id} className="flex flex-col space-y-2">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={frame.id}
+                    checked={isSelected}
+                    onChange={() => toggleFrame(frame.id)}
+                    className="mr-2 form-checkbox h-5 w-5 text-blue-500"
+                  />
+                  <label htmlFor={frame.id} className="mr-2 text-black">
+                    {frame.size}
+                  </label>
+                </div>
+                {isSelected && (
+                  <div className="ml-7">
+                    <label className="block text-sm text-gray-600">
+                      Price per Click ($):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={selectedFrames[frame.id].pricePerClick}
+                      onChange={(e) => handlePriceChange(frame.id, e.target.value)}
+                      className="border p-1 w-full bg-gray-100 text-black rounded"
+                      placeholder="e.g., 0.50"
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -250,7 +266,6 @@ function CreateListingFinal({ session }) {
         </div>
       </div>
 
-      {/* My Listings Section */}
       <div className="p-6 shadow border border-gray-200 rounded-xl bg-white text-black">
         <h2 className="text-2xl font-bold mb-4">My Listings</h2>
         {isLoading ? (
@@ -276,16 +291,16 @@ function CreateListingFinal({ session }) {
                 <p>
                   <strong>Website:</strong> {listing.website}
                 </p>
-                {console.log("Listing Data:", listing)}
                 <div className="mt-2">
-                  <strong>Ad Frame:</strong>{" "}
+                  <strong>Ad Frames:</strong>{" "}
                   {listing.selected_frames &&
                     Object.keys(listing.selected_frames).map((key) => (
                       <span
                         key={key}
                         className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2"
                       >
-                        {listing.selected_frames[key].size}
+                        {listing.selected_frames[key].size} - $
+                        {listing.selected_frames[key].pricePerClick || "N/A"} per click
                       </span>
                     ))}
                 </div>
