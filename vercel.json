@@ -1,8 +1,22 @@
 {
-    "rewrites": [
-      {
-        "source": "/(.*)",
-        "destination": "/index.html"
-      }
-    ]
+  "rewrites": [
+    {
+      "source": "/serve-ad/:listingId",
+      "destination": "/api/serve-ad/[listingId]"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/serve-ad/[listingId].js": {
+      "memory": 128,
+      "maxDuration": 10
+    }
   }
+}

@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -6,7 +6,7 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
 );
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   // Extract the listingId from the URL path (e.g., /serve-ad/[listingId])
   const listingId = req.query.listingId || req.url.split('/').pop().split('?')[0];
   const frame = req.query.frame;
