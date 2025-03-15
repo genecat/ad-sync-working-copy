@@ -7,6 +7,7 @@ interface ListingCardProps {
 }
 
 const ListingCard: React.FC<ListingCardProps> = ({ listing, onDelete, animationDelay = 0 }) => {
+  console.log("Listing data:", listing);
   let selectedFrames = listing.selected_frames || {};
   if (typeof selectedFrames === "string") {
     try {
@@ -17,7 +18,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onDelete, animationD
     }
   }
 
-  let frameSize = "";
+  let frameSize = "N/A";
   let framePricePerClick = 0;
   let totalClicks = 0;
   let totalEarnings = 0;
@@ -25,16 +26,23 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onDelete, animationD
 
   Object.keys(selectedFrames).forEach((key) => {
     const frame = selectedFrames[key];
-    // Try to get clicks from either "clicks" or "clickCount"
+    if (frame.uploadedFile) {
+      frameSize = frame.size || "N/A";
+      adImageURL = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frame.uploadedFile}`;
+    }
+  });
+
+  Object.keys(selectedFrames).forEach((key) => {
+    const frame = selectedFrames[key];
     const clicks = parseInt(frame?.clicks || frame?.clickCount || "0", 10);
-    // Try to get price per click from either "pricePerClick" or "price"
     const pricePerClick = parseFloat(frame?.pricePerClick || frame?.price || "0") || 0;
     totalClicks += clicks;
     totalEarnings += clicks * pricePerClick;
-    frameSize = frame?.size || "N/A";
-    framePricePerClick = pricePerClick;
-    if (frame.uploadedFile) {
-      adImageURL = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frame.uploadedFile}`;
+    if (!adImageURL) {
+      frameSize = frameSize === "N/A" ? frame?.size || "N/A" : frameSize;
+      framePricePerClick = pricePerClick;
+    } else if (frame.uploadedFile) {
+      framePricePerClick = pricePerClick;
     }
   });
 
@@ -45,12 +53,13 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onDelete, animationD
     >
       <div className="mb-2">
         <p className="text-sm font-medium">Listing ID: {listing.id}</p>
+        <p className="text-sm font-medium">Title: {listing.title}</p>
       </div>
       <div className="mb-2">
-        {adImageURL ? (
-          <img src={adImageURL} alt="Ad Creative" className="w-full h-auto" />
+        {listing.website ? (
+          <p className="text-sm break-all">{listing.website}</p>
         ) : (
-          <p className="text-sm text-gray-500">No Ad Uploaded</p>
+          <p className="text-sm text-gray-500">No Website Listed</p>
         )}
       </div>
       <div className="mb-2">
@@ -65,12 +74,21 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onDelete, animationD
         <p className="text-sm">Created At: {listing.created_at}</p>
       </div>
       <div>
-        <button className="bg-yellow-500 text-white px-2 py-1 rounded mr-2" onClick={() => alert("Edit action")}>
+        <button
+          className="bg-yellow-500 text-white px-2 py-1 rounded mr-2"
+          onClick={() => {
+            console.log("Edit button clicked for listing ID:", listing.id);
+            alert("Edit action");
+          }}
+        >
           Edit
         </button>
         <button
           className="bg-red-500 text-white px-2 py-1 rounded"
-          onClick={() => onDelete(listing.id)}
+          onClick={() => {
+            console.log("Delete button clicked for listing ID:", listing.id);
+            onDelete(listing.id);
+          }}
         >
           Delete
         </button>

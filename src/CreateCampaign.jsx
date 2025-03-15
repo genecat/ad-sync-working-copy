@@ -32,7 +32,6 @@ export default function CreateCampaign({ session }) {
   });
 
   // Step 3: Publisher-specific details (frame selections, file uploads)
-  // Structure: { publisherId: { framesChosen: { frameKey: true }, uploads: { frameKey: filePath } } }
   const [publisherDetails, setPublisherDetails] = useState({});
 
   // ---------------------------
@@ -48,7 +47,7 @@ export default function CreateCampaign({ session }) {
     try {
       const { data, error } = await supabase
         .from("listings")
-        .select("*") // fetch everything so we can parse
+        .select("*")
         .eq("category", selectedCategory);
 
       if (error) throw error;
@@ -57,10 +56,8 @@ export default function CreateCampaign({ session }) {
         return;
       }
 
-      // Convert selected_frames if it's a JSON string
       const parsedData = data.map((pub) => {
         let frames = pub.selected_frames;
-
         if (typeof frames === "string") {
           try {
             frames = JSON.parse(frames);
@@ -69,15 +66,15 @@ export default function CreateCampaign({ session }) {
             frames = {};
           }
         }
-
         pub.selected_frames = frames || {};
         return pub;
       });
 
-      setPublisherResults(parsedData); console.log("Parsed Publisher Data:", parsedData);
+      setPublisherResults(parsedData);
+      console.log("Parsed Publisher Data:", parsedData);
     } catch (err) {
       setError(err.message);
-console.log("handleSearchPublishers is running");
+      console.log("handleSearchPublishers is running");
     }
   }
 
@@ -176,7 +173,6 @@ console.log("handleSearchPublishers is running");
       selected_publishers: selectedPublishers.map((pub) => {
         const pubId = pub.id;
         const framesChosen = publisherDetails[pubId]?.framesChosen || {};
-        // Build purchased frames array
         const purchasedFrames = Object.entries(framesChosen)
           .filter(([_, isSelected]) => isSelected)
           .map(([frameKey]) => {
@@ -285,7 +281,7 @@ console.log("handleSearchPublishers is running");
                               const ppc = frameData.pricePerClick || "0.00";
                               return (
                                 <li key={frameKey}>
-                                  {dim} - ${ppc}
+                                  {dim} - ${ppc} (Frame: {frameKey})
                                 </li>
                               );
                             })}
@@ -653,7 +649,6 @@ console.log("handleSearchPublishers is running");
     </div>
   );
 }
-
 
 
 

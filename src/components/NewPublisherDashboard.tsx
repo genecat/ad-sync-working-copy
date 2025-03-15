@@ -7,16 +7,14 @@ import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import ListingCard from "./ListingCard";
 
-// The listing ID we want to fetch
-const listingIdToShow = "c04e2c31-1ea4-440e-a7ce-80cad002da79";
-
 const NewPublisherDashboard = () => {
   const [listings, setListings] = useState<any[]>([]);
+  const [totalImpressions, setTotalImpressions] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // On mount, fetch the single listing row with that ID
+  // On mount, fetch all listings and impressions for the logged-in publisher
   useEffect(() => {
     async function fetchData() {
       try {
@@ -24,22 +22,47 @@ const NewPublisherDashboard = () => {
 
         // 1) Get current user
         const { data: userData, error: userError } = await supabase.auth.getUser();
-        if (userError) throw userError;
+        if (userError) throw new Error(`User fetch error: ${userError.message}`);
         const user = userData?.user;
         console.log("User fetched:", user);
+        if (!user) throw new Error("No user is logged in");
 
-        // 2) If user is present, fetch that one listing
-        if (user) {
-          const { data, error: listingError } = await supabase
-            .from("listings")
-            .select("*")
-            .eq("id", listingIdToShow);
-          if (listingError) throw listingError;
-          console.log("Fetched from DB:", data);
-          setListings(data || []);
+        // 2) Fetch the user's profile to get publisher_id
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("id", user.id)
+          .single();
+        if (profileError) throw new Error(`Profile fetch error: ${profileError.message}`);
+        const publisherId = profileData?.id;
+        console.log("Publisher ID:", publisherId);
+        if (!publisherId) throw new Error("Publisher ID not found in profiles");
+
+        // 3) Fetch all listings for this publisher
+        const { data: listingData, error: listingError } = await supabase
+          .from("listings")
+          .select("*")
+          .eq("publisher_id", publisherId);
+        if (listingError) throw new Error(`Listings fetch error: ${listingError.message}`);
+        console.log("Fetched listings from DB:", listingData);
+        if (!listingData || listingData.length === 0) {
+          throw new Error(`No listings found for publisher_id: ${publisherId}`);
         }
+        setListings(listingData);
+
+        // 4) Fetch campaigns where any selected_publishers.id matches the listing IDs and sum impressions
+        const listingIds = listingData.map((l) => l.id).map(id => `'${id}'`);
+        const { data: campaignData, error: campaignError } = await supabase.rpc('custom_campaigns_by_listing_ids', { listing_ids: listingIds });
+        if (campaignError) throw new Error(`Campaigns fetch error: ${campaignError.message}`);
+        console.log("Fetched campaigns from DB:", campaignData);
+        const totalImp = campaignData.reduce((sum, campaign) => {
+          const campaignImpressions = parseInt(campaign.impressions || "0", 10) || 0;
+          console.log("Campaign impressions:", campaignImpressions, "for campaign:", campaign);
+          return sum + campaignImpressions;
+        }, 0);
+        setTotalImpressions(totalImp);
       } catch (err: any) {
-        console.error("Error fetching listing data:", err);
+        console.error("Error fetching data:", err);
         setError(err.message);
         toast({
           variant: "destructive",
@@ -66,8 +89,7 @@ const NewPublisherDashboard = () => {
         selectedFrames = {};
       }
     }
-    // Debug log
-    console.log("Debug Frame Data:", selectedFrames);
+    console.log("Debug Frame Data for listing", listing.id, ":", selectedFrames);
 
     let listingClicks = 0;
     Object.values(selectedFrames).forEach((frame: any) => {
@@ -100,13 +122,21 @@ const NewPublisherDashboard = () => {
 
   // Delete listing
   const handleDeleteListing = async (id: string) => {
+    console.log("Attempting to delete listing with ID:", id); // Log before delete
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("listings")
         .delete()
         .eq("id", id);
+      console.log("Delete response:", { data, error }); // Log after delete
       if (error) throw error;
-      setListings(listings.filter((l) => l.id !== id));
+      // Refetch listings to sync with Supabase
+      const { data: updatedListings, error: fetchError } = await supabase
+        .from("listings")
+        .select("*")
+        .eq("publisher_id", (await supabase.auth.getUser()).data.user.id);
+      if (fetchError) throw fetchError;
+      setListings(updatedListings || []);
       toast({
         title: "Listing deleted",
         description: "The listing has been successfully removed",
@@ -158,8 +188,8 @@ const NewPublisherDashboard = () => {
 
         {isLoading ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
-              {[...Array(4)].map((_, i) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 animate-pulse">
+              {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-28 rounded-xl" />
               ))}
             </div>
@@ -168,12 +198,12 @@ const NewPublisherDashboard = () => {
         ) : (
           <>
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
               <Card className="p-6 shadow-sm border border-gray-100 animate-fade-up">
                 <div className="flex items-start justify-between">
-                  <div>
+                  <div className="text-center w-full">
                     <p className="text-sm text-gray-500 font-medium mb-1">Total Listings</p>
-                    <p className="text-2xl font-semibold">{totalListings}</p>
+                    <p className="text-2xl font-semibold text-center">{totalListings}</p>
                   </div>
                   <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center">
                     <BarChart3 className="h-5 w-5 text-blue-600" />
@@ -183,9 +213,21 @@ const NewPublisherDashboard = () => {
 
               <Card className="p-6 shadow-sm border border-gray-100 animate-fade-up">
                 <div className="flex items-start justify-between">
-                  <div>
+                  <div className="text-center w-full">
+                    <p className="text-sm text-gray-500 font-medium mb-1">Total Impressions</p>
+                    <p className="text-2xl font-semibold text-center">{totalImpressions}</p>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center">
+                    <Image className="h-5 w-5 text-gray-600" />
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6 shadow-sm border border-gray-100 animate-fade-up">
+                <div className="flex items-start justify-between">
+                  <div className="text-center w-full">
                     <p className="text-sm text-gray-500 font-medium mb-1">Total Clicks</p>
-                    <p className="text-2xl font-semibold">{totalClicks}</p>
+                    <p className="text-2xl font-semibold text-center">{totalClicks}</p>
                   </div>
                   <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center">
                     <MousePointer className="h-5 w-5 text-green-600" />
@@ -195,9 +237,9 @@ const NewPublisherDashboard = () => {
 
               <Card className="p-6 shadow-sm border border-gray-100 animate-fade-up">
                 <div className="flex items-start justify-between">
-                  <div>
+                  <div className="text-center w-full">
                     <p className="text-sm text-gray-500 font-medium mb-1">Total Earnings</p>
-                    <p className="text-2xl font-semibold">${totalEarnings.toFixed(2)}</p>
+                    <p className="text-2xl font-semibold text-center">${totalEarnings.toFixed(2)}</p>
                   </div>
                   <div className="h-10 w-10 rounded-full bg-yellow-50 flex items-center justify-center">
                     <DollarSign className="h-5 w-5 text-yellow-600" />
@@ -207,9 +249,9 @@ const NewPublisherDashboard = () => {
 
               <Card className="p-6 shadow-sm border border-gray-100 animate-fade-up">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm text-gray-500 font-medium mb-1">Avg. Price per Click</p>
-                    <p className="text-2xl font-semibold">${avgPrice}</p>
+                  <div className="text-center w-full">
+                    <p className="text-sm text-gray-500 font-medium mb-1">Avg. PPC</p>
+                    <p className="text-2xl font-semibold text-center">${avgPrice}</p>
                   </div>
                   <div className="h-10 w-10 rounded-full bg-purple-50 flex items-center justify-center">
                     <DollarSign className="h-5 w-5 text-purple-600" />
@@ -220,7 +262,7 @@ const NewPublisherDashboard = () => {
 
             {/* Listings */}
             <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-4">Your Listing</h2>
+              <h2 className="text-xl font-semibold mb-4">Your Listings</h2>
               {listings.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {listings.map((listing, index) => (
@@ -237,9 +279,9 @@ const NewPublisherDashboard = () => {
                   <div className="h-16 w-16 rounded-full bg-blue-50 flex items-center justify-center mb-4">
                     <Image className="h-8 w-8 text-blue-600" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">No listing found</h3>
+                  <h3 className="text-lg font-semibold mb-2">No listings found</h3>
                   <p className="text-gray-500 max-w-md mb-6">
-                    This specific listing (ID {listingIdToShow}) does not exist or was removed.
+                    You haven't created any listings yet.
                   </p>
                   <Button className="btn-primary">
                     <PlusCircle className="mr-2 h-4 w-4" />
@@ -256,6 +298,5 @@ const NewPublisherDashboard = () => {
 };
 
 export default NewPublisherDashboard;
-
 
 

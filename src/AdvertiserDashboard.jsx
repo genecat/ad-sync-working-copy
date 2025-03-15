@@ -25,7 +25,25 @@ function AdvertiserDashboard({ session }) {
           .eq('advertiser_id', session.user.id);
         if (error) throw error;
         setCampaigns(data || []);
-        calculateStats(data);
+
+        const statsPromises = data.map(async (campaign) => {
+          const stats = await Promise.all(campaign.selected_publishers.map(async (publisher) => {
+            const frames = Object.keys(publisher.extra_details.framesChosen);
+            const frameStats = await Promise.all(frames.map(async (frame) => {
+              const { data: stat } = await supabase
+                .from('ad_stats')
+                .select('impression_count, click_count')
+                .eq('listing_id', publisher.id)
+                .eq('frame', frame)
+                .single();
+              return stat || { impression_count: 0, click_count: 0 };
+            }));
+            return { publisherId: publisher.id, stats: frameStats };
+          }));
+          return { campaignId: campaign.id, stats };
+        });
+        const campaignStats = await Promise.all(statsPromises);
+        calculateStats(data, campaignStats);
       } catch (err) {
         setError(err.message);
       }
@@ -34,28 +52,32 @@ function AdvertiserDashboard({ session }) {
     fetchCampaigns();
   }, [session]);
 
-  const calculateStats = (campaigns) => {
+  const calculateStats = (campaigns, campaignStats) => {
     let totalClicks = 0;
     let totalSpent = 0;
     let totalBudget = 0;
     let totalImpressions = 0;
 
-    campaigns.forEach((campaign) => {
+    campaigns.forEach((campaign, index) => {
       const details = campaign.campaign_details || {};
       const budget = parseFloat(details.budget) || 0;
-      const clicks = campaign.clicks || 0;
-      const impressions = campaign.impressions || 0;
+      const campaignStat = campaignStats[index].stats.reduce((acc, publisherStats) => {
+        const frameTotals = publisherStats.stats.reduce((frameAcc, frameStat) => ({
+          impression_count: (frameAcc.impression_count || 0) + (frameStat.impression_count || 0),
+          click_count: (frameAcc.click_count || 0) + (frameStat.click_count || 0),
+        }), {});
+        return {
+          impression_count: (acc.impression_count || 0) + (frameTotals.impression_count || 0),
+          click_count: (acc.click_count || 0) + (frameTotals.click_count || 0),
+        };
+      }, {});
+      const clicks = campaignStat.click_count || 0;
+      const impressions = campaignStat.impression_count || 0;
       let pricePerClick = 0;
 
-      if (
-        Array.isArray(campaign.selected_publishers) &&
-        campaign.selected_publishers.length > 0
-      ) {
+      if (Array.isArray(campaign.selected_publishers) && campaign.selected_publishers.length > 0) {
         const firstPublisher = campaign.selected_publishers[0];
-        if (
-          Array.isArray(firstPublisher.frames_purchased) &&
-          firstPublisher.frames_purchased.length > 0
-        ) {
+        if (Array.isArray(firstPublisher.frames_purchased) && firstPublisher.frames_purchased.length > 0) {
           pricePerClick = parseFloat(firstPublisher.frames_purchased[0].pricePerClick) || 0;
         }
       }
@@ -64,6 +86,9 @@ function AdvertiserDashboard({ session }) {
       totalSpent += clicks * pricePerClick;
       totalBudget += budget;
       totalImpressions += impressions;
+
+      campaign.clicks = clicks;
+      campaign.impressions = impressions;
     });
 
     const avgCostPerClick = totalClicks > 0 ? (totalSpent / totalClicks).toFixed(2) : "0.00";
@@ -83,7 +108,6 @@ function AdvertiserDashboard({ session }) {
     <div className="max-w-5xl mx-auto my-10 px-4 bg-white text-black">
       <h1 className="text-3xl font-bold mb-6">Advertiser Dashboard</h1>
 
-      {/* Aggregate Totals Section */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
         {[
           { title: "Total Clicks", value: stats.totalClicks },
@@ -100,7 +124,6 @@ function AdvertiserDashboard({ session }) {
         ))}
       </div>
 
-      {/* My Campaigns Section */}
       <h2 className="text-2xl font-bold mb-4">My Campaigns</h2>
       {campaigns.length === 0 ? (
         <p>No campaigns found.</p>
@@ -117,15 +140,9 @@ function AdvertiserDashboard({ session }) {
             const clicks = campaign.clicks || 0;
             const impressions = campaign.impressions || 0;
             let pricePerClick = 0;
-            if (
-              Array.isArray(campaign.selected_publishers) &&
-              campaign.selected_publishers.length > 0
-            ) {
+            if (Array.isArray(campaign.selected_publishers) && campaign.selected_publishers.length > 0) {
               const firstPublisher = campaign.selected_publishers[0];
-              if (
-                Array.isArray(firstPublisher.frames_purchased) &&
-                firstPublisher.frames_purchased.length > 0
-              ) {
+              if (Array.isArray(firstPublisher.frames_purchased) && firstPublisher.frames_purchased.length > 0) {
                 pricePerClick = parseFloat(firstPublisher.frames_purchased[0].pricePerClick) || 0;
               }
             }
@@ -134,7 +151,6 @@ function AdvertiserDashboard({ session }) {
 
             return (
               <div key={campaign.id} className="p-6 bg-white shadow-md rounded-lg border border-gray-200">
-                {/* Campaign Header */}
                 <div className="border-b pb-2 mb-4">
                   <h3 className="text-xl font-semibold">{campaignName}</h3>
                   <p className="text-gray-700">Ends: {endDate}</p>
@@ -149,9 +165,23 @@ function AdvertiserDashboard({ session }) {
                       {targetURL}
                     </a>
                   </p>
+                  {campaign.selected_publishers && campaign.selected_publishers.length > 0 && (
+                    <div>
+                      <p className="text-gray-700">
+                        Publisher:{" "}
+                        <a
+                          href={campaign.selected_publishers[0].url}
+                          className="text-blue-500 underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {campaign.selected_publishers[0].website || campaign.selected_publishers[0].url || "Unknown"}
+                        </a>
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {/* Campaign Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                   <div className="p-4 bg-gray-100 shadow rounded-lg">
                     <strong>Budget:</strong> ${budget.toFixed(2)}
@@ -173,7 +203,6 @@ function AdvertiserDashboard({ session }) {
                   </div>
                 </div>
 
-                {/* Campaign Ad Creative */}
                 <div className="text-center mt-4">
                   {campaign.selected_publishers &&
                   campaign.selected_publishers.length > 0 &&
