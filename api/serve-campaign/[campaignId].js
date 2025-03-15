@@ -66,7 +66,7 @@ export default async (req, res) => {
     // Construct the ad image URL
     const adImageURL = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${uploadedFilePath}`;
 
-    // Use the correct Listing ID from your database
+    // Use the correct Listing ID and frame from your database
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -81,7 +81,11 @@ export default async (req, res) => {
               fetch('/api/track-click', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ listingId: 'c04e2c31-1ea4-440e-a7ce-80cad002da79', campaignId: '${campaignId}' })
+                body: JSON.stringify({ 
+                  listingId: 'c04e2c31-1ea4-440e-a7ce-80cad002da79', 
+                  frame: 'frame5', 
+                  campaignId: '${campaignId}'
+                })
               }).then(response => {
                 if (response.ok) {
                   console.log('Click tracked successfully, redirecting to:', '${targetURL}');
