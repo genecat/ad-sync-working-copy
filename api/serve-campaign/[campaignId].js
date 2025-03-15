@@ -76,9 +76,29 @@ module.exports = async (req, res) => {
             body { margin: 0; padding: 0; background: #fff; text-align: center; }
             img { max-width: 100%; border: none; cursor: pointer; }
           </style>
+          <script>
+            function trackClick() {
+              fetch('/api/track-click', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ listingId: 'c04e2c31-1ea4-440e-a7ce-80cad002da79', campaignId: '${campaignId}' })
+              }).then(response => {
+                if (response.ok) {
+                  console.log('Click tracked successfully, redirecting to:', '${targetURL}');
+                  window.open('${targetURL}', '_blank');
+                } else {
+                  console.error('Failed to track click:', response.statusText);
+                  window.open('${targetURL}', '_blank');
+                }
+              }).catch(error => {
+                console.error('Error tracking click:', error);
+                window.open('${targetURL}', '_blank');
+              });
+            }
+          </script>
         </head>
         <body>
-          <a href="/track-click/${campaignId}?listing_id=c04e2c31-1ea4-440e-a7ce-80cad002da79" target="_blank">
+          <a href="javascript:void(0)" onclick="trackClick()">
             <img src="${adImageURL}" alt="Ad Creative" />
           </a>
         </body>
