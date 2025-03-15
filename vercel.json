@@ -5,16 +5,32 @@
       "destination": "/api/serve-ad/[listingId]"
     },
     {
+      "source": "/serve-campaign/:campaignId",
+      "destination": "/api/serve-campaign/[campaignId]"
+    },
+    {
+      "source": "/api/track-click",
+      "destination": "/api/track-click.js"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|serve-ad/|serve-campaign/).*)",
       "destination": "/index.html"
     }
   ],
   "functions": {
     "api/serve-ad/[listingId].js": {
+      "memory": 128,
+      "maxDuration": 10
+    },
+    "api/serve-campaign/[campaignId].js": {
+      "memory": 128,
+      "maxDuration": 10
+    },
+    "api/track-click.js": {
       "memory": 128,
       "maxDuration": 10
     }
