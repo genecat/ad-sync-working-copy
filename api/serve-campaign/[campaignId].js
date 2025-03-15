@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 // SUPABASE CREDENTIALS
 const SUPABASE_URL = 'https://pczzwgluhgrjuxjadyaq.supabase.co';
@@ -6,7 +6,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   let campaignId = req.query.campaignId || (req.params && req.params.campaignId);
 
   if (!campaignId) {
