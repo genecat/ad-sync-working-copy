@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+// Test auto-assignment
+
 
 const supabase = createClient(
   'https://pczzwgluhgrjuxjadyaq.supabase.co',
