@@ -53,14 +53,33 @@ export default async (req, res) => {
 
     // Extract the uploaded ad image
     let uploadedFilePath = null;
+    let listingId = '2a4f917f-196f-4584-bf80-10fad4f018c6'; // Hardcoded for now, based on ad_stats
+    let frame = 'frame5'; // Hardcoded for now, based on ad_stats
     if (publishers && publishers.length > 0) {
       const firstPub = publishers[0];
       const frames = firstPub.frames_purchased || [];
       uploadedFilePath = frames.length > 0 ? frames[0].uploadedFile : null;
+      // Optionally, extract listingId and frame dynamically from selected_publishers if available
     }
 
     if (!uploadedFilePath) {
       return res.send('<h1>No ad uploaded for this campaign.</h1>');
+    }
+
+    // Track impression
+    try {
+      const { error: impressionError } = await supabase.rpc('increment_impression', {
+        p_listing_id: listingId,
+        p_frame: frame,
+        p_campaign_id: campaignId
+      });
+      if (impressionError) {
+        console.error('Failed to track impression:', impressionError);
+      } else {
+        console.log('Impression tracked successfully for:', { listingId, frame, campaignId });
+      }
+    } catch (impressionErr) {
+      console.error('Error tracking impression:', impressionErr);
     }
 
     // Construct the ad image URL
@@ -82,8 +101,8 @@ export default async (req, res) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                  listingId: '2a4f917f-196f-4584-bf80-10fad4f018c6', 
-                  frame: 'frame5', 
+                  listingId: '${listingId}', 
+                  frame: '${frame}', 
                   campaignId: '${campaignId}'
                 })
               }).then(response => {
