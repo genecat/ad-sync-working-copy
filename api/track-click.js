@@ -5,29 +5,40 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
 );
 
-export default async (req, res) => {
+export default async function handler(req, res) {
+  console.log('Track-click request received:', req.method, req.body);
+
   if (req.method !== 'POST') {
-    res.status(405).send('Method not allowed');
-    return;
+    console.log('Method not allowed:', req.method);
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { listingId, frame } = req.body;
+  const { listingId, frame, campaignId } = req.body;
+
+  console.log('Parameters received:', { listingId, frame, campaignId });
 
   if (!listingId || !frame) {
-    res.status(400).send('Missing listingId or frame');
-    return;
+    console.log('Missing parameters in track-click');
+    return res.status(400).json({ error: 'Missing listingId or frame' });
   }
 
-  const { error } = await supabase.rpc('increment_click', {
-    p_listing_id: listingId,
-    p_frame: frame
-  });
+  try {
+    console.log('Calling increment_click with:', { p_listing_id: listingId, p_frame: frame, p_campaign_id: campaignId || 'unknown' });
+    const { error } = await supabase.rpc('increment_click', {
+      p_listing_id: listingId,
+      p_frame: frame,
+      p_campaign_id: campaignId || 'unknown'
+    });
 
-  if (error) {
-    console.error("Click Tracking Error:", error);
-    res.status(500).send('Error tracking click');
-    return;
+    if (error) {
+      console.error('Supabase RPC error:', { code: error.code, message: error.message, details: error.details });
+      return res.status(500).json({ error: 'Failed to increment click', details: error.message });
+    }
+
+    console.log('Click tracked successfully for:', { listingId, frame, campaignId });
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Unexpected error in track-click handler:', error.stack || error.message);
+    res.status(500).json({ error: 'Internal server error', details: error.message || 'Unknown error' });
   }
-
-  res.status(200).send('Click tracked successfully');
-};
+}
