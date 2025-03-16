@@ -34,5 +34,10 @@
       "memory": 128,
       "maxDuration": 10
     }
-  }
+  },
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "domains": [
+    "my-ad-agency.vercel.app"
+  ]
 }
