@@ -36,8 +36,5 @@
     }
   },
   "cleanUrls": true,
-  "trailingSlash": false,
-  "domains": [
-    "my-ad-agency.vercel.app"
-  ]
+  "trailingSlash": false
 }
