@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { supabase } from "./lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
-const AuthForm = ({ setSession }) => {
+const AuthForm = ({ session, setSession }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -11,14 +11,17 @@ const AuthForm = ({ setSession }) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    console.log("Sign-in attempt:", { email, password });
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    console.log("Supabase response:", { data, error });
     if (error) {
       setError(error.message);
     } else {
       setSession(data.session);
+      console.log("Session set:", data.session);
     }
     setLoading(false);
   };
@@ -81,4 +84,3 @@ const AuthForm = ({ setSession }) => {
 };
 
 export default AuthForm;
-
