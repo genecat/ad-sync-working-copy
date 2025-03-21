@@ -10,6 +10,8 @@ export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // Allow the response to be framed (remove X-Frame-Options: DENY)
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // Or remove this header entirely
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -94,7 +96,7 @@ export default async (req, res) => {
           if (e.target.tagName === 'IMG') {
             e.preventDefault();
             console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency-k81keyc90-genecats-projects.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-cjqks78yu-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameData.campaign_id}' })
