@@ -34,11 +34,20 @@ export default async (req, res) => {
     .eq('frame_id', frame)
     .single();
 
-  if (frameError || !frameData) {
+  console.log("Frame Query Result:", { frameData, frameError });
+
+  if (frameError) {
     console.log("Frame Error:", frameError);
     res.status(404).send('Frame not found');
     return;
   }
+
+  if (!frameData) {
+    console.log("No frame data found for frame:", frame);
+    res.status(404).send('Frame not found');
+    return;
+  }
+
   console.log("Frame Data:", frameData);
 
   // Fetch campaign data to get target URL and check if active
@@ -47,6 +56,8 @@ export default async (req, res) => {
     .select('id, campaign_details')
     .eq('id', frameData.campaign_id)
     .single();
+
+  console.log("Campaign Query Result:", { campaign, campaignError });
 
   if (campaignError || !campaign) {
     console.log("Campaign Error:", campaignError);
@@ -83,7 +94,7 @@ export default async (req, res) => {
           if (e.target.tagName === 'IMG') {
             e.preventDefault();
             console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-k81keyc90-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameData.campaign_id}' })
