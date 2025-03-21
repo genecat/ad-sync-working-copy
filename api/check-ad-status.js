@@ -30,7 +30,14 @@ export default async function handler(req, res) {
       .eq('frame_id', frameId)
       .single();
 
-    if (frameError || !frameData) {
+    console.log('Frame Query Result:', { frameData, frameError });
+
+    if (frameError) {
+      console.error('Frame Query Error:', frameError);
+      return res.status(500).json({ error: 'Error fetching frame data' });
+    }
+
+    if (!frameData) {
       return res.status(200).json({ isActive: false });
     }
 
@@ -41,7 +48,14 @@ export default async function handler(req, res) {
       .eq('id', frameData.campaign_id)
       .single();
 
-    if (campaignError || !campaign) {
+    console.log('Campaign Query Result:', { campaign, campaignError });
+
+    if (campaignError) {
+      console.error('Campaign Query Error:', campaignError);
+      return res.status(500).json({ error: 'Error fetching campaign data' });
+    }
+
+    if (!campaign) {
       return res.status(200).json({ isActive: false });
     }
 
