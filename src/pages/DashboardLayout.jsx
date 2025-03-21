@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from "./lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
+import { Link } from "react-router-dom";
 
 function DashboardLayout({ children, user, onLogout }) {
   const [role, setRole] = useState('');
@@ -55,33 +56,41 @@ function DashboardLayout({ children, user, onLogout }) {
         </div>
         <nav>
           <ul>
-            <li className="mb-4">
-              <a href="/publisher-dashboard" className="hover:text-gray-300">
-                Publisher Dashboard
-              </a>
-            </li>
-            <li className="mb-4">
-              <a href="/create-listing" className="hover:text-gray-300">
-                Create Listing
-              </a>
-            </li>
-            {role === 'publisher' && listingId && (
-              <li className="mb-4 ml-4">
-                <a href={`/modify-listing/${listingId}`} className="hover:text-gray-300">
-                  Modify Listing
-                </a>
-              </li>
+            {role === "publisher" && (
+              <>
+                <li className="mb-4">
+                  <Link to="/publisher-dashboard" className="hover:text-gray-300">
+                    Publisher Dashboard
+                  </Link>
+                </li>
+                <li className="mb-4">
+                  <Link to="/create-listing-final" className="hover:text-gray-300">
+                    Create Listing
+                  </Link>
+                </li>
+                {listingId && (
+                  <li className="mb-4 ml-4">
+                    <Link to={`/modify-listing/${listingId}`} className="hover:text-gray-300">
+                      Modify Listing
+                    </Link>
+                  </li>
+                )}
+              </>
             )}
-            <li className="mb-4">
-              <a href="/advertiser-dashboard" className="hover:text-gray-300">
-                Advertiser Dashboard
-              </a>
-            </li>
-            <li>
-              <a href="/create-campaign" className="hover:text-gray-300">
-                Create Campaign
-              </a>
-            </li>
+            {role === "advertiser" && (
+              <>
+                <li className="mb-4">
+                  <Link to="/advertiser-dashboard" className="hover:text-gray-300">
+                    Advertiser Dashboard
+                  </Link>
+                </li>
+                <li className="mb-4">
+                  <Link to="/create-campaign" className="hover:text-gray-300">
+                    Create Campaign
+                  </Link>
+                </li>
+              </>
+            )}
           </ul>
         </nav>
       </aside>
@@ -112,5 +121,4 @@ function DashboardLayout({ children, user, onLogout }) {
 }
 
 export default DashboardLayout;
-
 

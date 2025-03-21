@@ -29,17 +29,37 @@ const ModifyListing = ({ session }) => {
   const [selectedFrameToCopy, setSelectedFrameToCopy] = useState('all');
 
   useEffect(() => {
+    console.log("ModifyListing component mounted with listingId:", listingId);
+    console.log("Session:", session);
+
+    if (!listingId) {
+      console.error("No listingId provided in URL");
+      setError("Invalid listing ID");
+      return;
+    }
+
+    if (!session) {
+      console.error("No session provided");
+      setError("You must be logged in to modify a listing");
+      return;
+    }
+
     async function fetchListing() {
-      console.log("Fetching listing for ID:", listingId);
-      const { data, error } = await supabase
-        .from('listings')
-        .select('*')
-        .eq('id', listingId)
-        .single();
-      if (error) {
-        console.error('Error fetching listing:', error);
-        setError('Error fetching listing: ' + error.message);
-      } else if (data) {
+      try {
+        console.log("Fetching listing for ID:", listingId);
+        const { data, error } = await supabase
+          .from('listings')
+          .select('*')
+          .eq('id', listingId)
+          .single();
+        if (error) {
+          console.error('Error fetching listing:', error);
+          throw new Error('Error fetching listing: ' + error.message);
+        }
+        if (!data) {
+          console.error('No listing found for ID:', listingId);
+          throw new Error('Listing not found');
+        }
         console.log("Fetched listing data:", data);
         setListing(data);
         let frames = data.selected_frames;
@@ -53,21 +73,27 @@ const ModifyListing = ({ session }) => {
         }
         setSelectedFrames(frames || {});
         setCategory(data.category || '');
-        generateCode();
+        generateCode(frames || {});
+      } catch (err) {
+        console.error("Fetch listing error:", err);
+        setError(err.message);
       }
     }
     fetchListing();
-  }, [listingId]);
+  }, [listingId, session]);
 
   const handleFramePriceChange = (frameKey, newPrice) => {
-    setSelectedFrames((prev) => ({
-      ...prev,
-      [frameKey]: {
-        ...prev[frameKey],
-        pricePerClick: newPrice,
-      },
-    }));
-    generateCode();
+    setSelectedFrames((prev) => {
+      const updatedFrames = {
+        ...prev,
+        [frameKey]: {
+          ...prev[frameKey],
+          pricePerClick: newPrice,
+        },
+      };
+      generateCode(updatedFrames);
+      return updatedFrames;
+    });
   };
 
   const addFrame = (size, price) => {
@@ -76,43 +102,79 @@ const ModifyListing = ({ session }) => {
       return;
     }
     const frameKey = `frame${Date.now()}`;
-    setSelectedFrames((prev) => ({
-      ...prev,
-      [frameKey]: { size, pricePerClick: price },
-    }));
+    setSelectedFrames((prev) => {
+      const updatedFrames = {
+        ...prev,
+        [frameKey]: { size, pricePerClick: price },
+      };
+      generateCode(updatedFrames);
+      return updatedFrames;
+    });
     setNewFramePrice('');
     setError('');
-    generateCode();
   };
 
   const removeFrame = (frameKey) => {
     setSelectedFrames((prev) => {
       const updated = { ...prev };
       delete updated[frameKey];
+      generateCode(updated);
       return updated;
     });
-    generateCode();
   };
 
-  const generateCode = () => {
-    console.log("Generating embed code for frames:", selectedFrames);
+  const generateCode = (frames) => {
+    console.log("Generating embed code for frames:", frames);
+    if (!listingId) {
+      console.error("Cannot generate embed code: listingId is not defined");
+      setError("Cannot generate embed code: Invalid listing ID");
+      return;
+    }
     const baseUrl = "https://my-ad-agency.vercel.app";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
-    Object.keys(selectedFrames).forEach((frameKey) => {
-      const frameData = selectedFrames[frameKey];
+    Object.keys(frames).forEach((frameKey) => {
+      const frameData = frames[frameKey];
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
-      code += `<iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
-      code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n\n`;
+      code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
+      code += `  <iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
+      code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
+      code += `</div>\n`;
+      code += `<script>\n`;
+      code += `  (function() {\n`;
+      code += `    const listingId = "${listingId}";\n`;
+      code += `    const frameId = "${frameKey}";\n`;
+      code += `    const adSlot = document.getElementById("ad-slot-${frameKey}");\n`;
+      code += `    async function checkAdStatus() {\n`;
+      code += `      try {\n`;
+      code += `        const response = await fetch(\`${baseUrl}/api/check-ad-status?listingId=\${listingId}&frameId=\${frameId}\`);\n`;
+      code += `        const data = await response.json();\n`;
+      code += `        if (!data.isActive) {\n`;
+      code += `          adSlot.style.display = "none";\n`;
+      code += `        }\n`;
+      code += `      } catch (error) {\n`;
+      code += `        console.error("Error checking ad status:", error);\n`;
+      code += `        adSlot.style.display = "none";\n`;
+      code += `      }\n`;
+      code += `    }\n`;
+      code += `    checkAdStatus();\n`;
+      code += `    setInterval(checkAdStatus, 5 * 60 * 1000);\n`;
+      code += `  })();\n`;
+      code += `</script>\n`;
     });
-    code += "<!-- Ad Exchange Embed Code End -->";
+    code += "<!-- Ad Exchange Embed Code End -->\n";
     setEmbedCode(code);
   };
 
   const generateCodeForSelected = () => {
+    if (!listingId) {
+      console.error("Cannot generate embed code: listingId is not defined");
+      setError("Cannot generate embed code: Invalid listing ID");
+      return;
+    }
     const baseUrl = "https://my-ad-agency.vercel.app";
     if (selectedFrameToCopy === 'all') {
-      generateCode();
+      generateCode(selectedFrames);
       return;
     }
     const frameKey = selectedFrameToCopy;
@@ -120,35 +182,81 @@ const ModifyListing = ({ session }) => {
     if (frameData) {
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
-      const code = `<!-- Ad Exchange Embed Code Start -->\n` +
-                   `<iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" ` +
-                   `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n` +
-                   `<!-- Ad Exchange Embed Code End -->`;
+      let code = `<!-- Ad Exchange Embed Code Start -->\n`;
+      code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
+      code += `  <iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
+      code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
+      code += `</div>\n`;
+      code += `<script>\n`;
+      code += `  (function() {\n`;
+      code += `    const listingId = "${listingId}";\n`;
+      code += `    const frameId = "${frameKey}";\n`;
+      code += `    const adSlot = document.getElementById("ad-slot-${frameKey}");\n`;
+      code += `    async function checkAdStatus() {\n`;
+      code += `      try {\n`;
+      code += `        const response = await fetch(\`${baseUrl}/api/check-ad-status?listingId=\${listingId}&frameId=\${frameId}\`);\n`;
+      code += `        const data = await response.json();\n`;
+      code += `        if (!data.isActive) {\n`;
+      code += `          adSlot.style.display = "none";\n`;
+      code += `        }\n`;
+      code += `      } catch (error) {\n`;
+      code += `        console.error("Error checking ad status:", error);\n`;
+      code += `        adSlot.style.display = "none";\n`;
+      code += `      }\n`;
+      code += `    }\n`;
+      code += `    checkAdStatus();\n`;
+      code += `    setInterval(checkAdStatus, 5 * 60 * 1000);\n`;
+      code += `  })();\n`;
+      code += `</script>\n`;
+      code += `<!-- Ad Exchange Embed Code End -->\n`;
       setEmbedCode(code);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("Submitting updated listing with payload:", { selectedFrames, category });
     const payload = {
       selected_frames: selectedFrames,
       category: category,
     };
-    const { error } = await supabase
-      .from('listings')
-      .update(payload)
-      .eq('id', listingId);
-    if (error) {
-      console.error('Error updating listing:', error);
-      setError('Error updating listing: ' + error.message);
-    } else {
+    try {
+      const { error } = await supabase
+        .from('listings')
+        .update(payload)
+        .eq('id', listingId);
+      if (error) {
+        console.error('Error updating listing:', error);
+        throw new Error('Error updating listing: ' + error.message);
+      }
       setMessage('Listing updated successfully!');
-      console.log("Listing updated with payload:", payload);
-      generateCode();
+      console.log("Listing updated successfully with payload:", payload);
+      generateCode(selectedFrames);
+    } catch (err) {
+      console.error("Submit error:", err);
+      setError(err.message);
     }
   };
 
-  if (!listing) return <p className="p-4 text-black">Loading listing details...</p>;
+  console.log("Current state - listing:", listing, "error:", error, "selectedFrames:", selectedFrames);
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto p-4 text-black">
+        <div className="p-8 shadow border border-gray-200 rounded-xl bg-white">
+          <h1 className="text-3xl font-bold mb-6">Error</h1>
+          <p className="text-red-500 mb-4">{error}</p>
+          <Link to="/publisher-dashboard" className="text-blue-600 underline">
+            Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!listing) {
+    return <p className="p-4 text-black">Loading listing details...</p>;
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-4 text-black">
@@ -282,8 +390,8 @@ const ModifyListing = ({ session }) => {
         </form>
 
         <div className="mt-6">
-          <Link to="/listings" className="text-blue-600 underline">
-            Back to Listings
+          <Link to="/publisher-dashboard" className="text-blue-600 underline">
+            Back to Dashboard
           </Link>
         </div>
       </div>
@@ -292,8 +400,6 @@ const ModifyListing = ({ session }) => {
 };
 
 export default ModifyListing;
-
-
 
 
 

@@ -1,18 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../lib/supabaseClient"; // Corrected path
+import { supabase } from "../lib/supabaseClient";
+import { uploadAdCreative } from "../utils/uploadCreative";
 
-// ===========================
-// 2) PUBLISHER CATEGORIES
-// ===========================
+// Publisher Categories
 const categories = ["Technology", "Sports", "Lifestyle", "Finance", "Entertainment"];
 
-// ===========================
-// 3) MAIN COMPONENT
-// ===========================
 export default function CreateCampaign({ session }) {
-  // ---------------------------
-  // A. STATE DECLARATIONS
-  // ---------------------------
   const [step, setStep] = useState(1);
   const [error, setError] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -31,13 +24,10 @@ export default function CreateCampaign({ session }) {
     endDate: { year: "", month: "", day: "" },
   });
 
-  // Step 3: Publisher-specific details (frame selections, file uploads)
+  // Step 3: Publisher-specific details
   const [publisherDetails, setPublisherDetails] = useState({});
 
-  // ---------------------------
-  // B. PARSE SELECTED_FRAMES
-  //    WHEN FETCHING PUBLISHERS
-  // ---------------------------
+  // Step 1: handleSearchPublishers
   async function handleSearchPublishers() {
     setError(null);
     if (!selectedCategory) {
@@ -45,40 +35,69 @@ export default function CreateCampaign({ session }) {
       return;
     }
     try {
-      const { data, error } = await supabase
+      const { data: listings, error: listingsError } = await supabase
         .from("listings")
         .select("*")
         .eq("category", selectedCategory);
 
-      if (error) throw error;
-      if (!data) {
+      if (listingsError) throw listingsError;
+      if (!listings || listings.length === 0) {
         setPublisherResults([]);
+        setError("No listings found for this category.");
         return;
       }
 
-      const parsedData = data.map((pub) => {
-        let frames = pub.selected_frames;
-        if (typeof frames === "string") {
-          try {
-            frames = JSON.parse(frames);
-          } catch (parseErr) {
-            console.error("Error parsing selected_frames:", parseErr);
-            frames = {};
+      const { data: vacantFrames, error: vacantError } = await supabase
+        .rpc("get_vacant_frames");
+
+      if (vacantError) throw vacantError;
+
+      console.log("Vacant Frames:", vacantFrames);
+
+      const listingIds = listings.map((listing) => listing.id.toString());
+      const filteredVacantFrames = vacantFrames.filter((vf) =>
+        listingIds.includes(vf.listing_id.toString())
+      );
+
+      console.log("Filtered Vacant Frames:", filteredVacantFrames);
+
+      const parsedData = listings
+        .map((listing) => {
+          let frames = listing.selected_frames;
+          if (typeof frames === "string") {
+            try {
+              frames = JSON.parse(frames);
+            } catch (parseErr) {
+              console.error("Error parsing selected_frames:", parseErr);
+              frames = {};
+            }
           }
-        }
-        pub.selected_frames = frames || {};
-        return pub;
-      });
+          listing.selected_frames = frames || {};
+
+          const vacantFramesForListing = filteredVacantFrames
+            .filter((vf) => vf.listing_id.toString() === listing.id.toString())
+            .reduce((acc, vf) => {
+              acc[vf.frame_key] = listing.selected_frames[vf.frame_key] || {};
+              return acc;
+            }, {});
+
+          return { ...listing, selected_frames: vacantFramesForListing };
+        })
+        .filter((listing) => Object.keys(listing.selected_frames).length > 0);
+
+      if (parsedData.length === 0) {
+        setError("No publishers with vacant frames found for this category.");
+      }
 
       setPublisherResults(parsedData);
-      console.log("Parsed Publisher Data:", parsedData);
+      console.log("Parsed Publisher Data with Vacant Frames:", parsedData);
     } catch (err) {
-      setError(err.message);
-      console.log("handleSearchPublishers is running");
+      setError("Error fetching publishers: " + err.message);
+      console.log("handleSearchPublishers error:", err);
     }
   }
 
-  // Toggle which publishers are selected
+  // Toggle publisher selection
   function togglePublisherSelection(pub) {
     const alreadySelected = selectedPublishers.some((p) => p.id === pub.id);
     if (alreadySelected) {
@@ -93,9 +112,7 @@ export default function CreateCampaign({ session }) {
     }
   }
 
-  // ---------------------------
-  // C. CAMPAIGN DETAILS
-  // ---------------------------
+  // Campaign details
   function handleCampaignDetailChange(e) {
     const { name, value } = e.target;
     setCampaignDetails((prev) => ({ ...prev, [name]: value }));
@@ -108,10 +125,7 @@ export default function CreateCampaign({ session }) {
     }));
   }
 
-  // ---------------------------
-  // D. PUBLISHER-SPECIFIC
-  //    FRAME CHOICES & UPLOAD
-  // ---------------------------
+  // Frame choices & upload
   function toggleFrameChoice(pubId, frameKey, isSelected) {
     setPublisherDetails((prev) => {
       const existing = prev[pubId] || {};
@@ -132,12 +146,8 @@ export default function CreateCampaign({ session }) {
       alert("No file selected.");
       return;
     }
-    const bucketName = "ad-creatives";
-    const filePath = `${pubId}/${frameKey}/${Date.now()}_${file.name}`;
     try {
-      const { error } = await supabase.storage.from(bucketName).upload(filePath, file);
-      if (error) throw new Error("File upload failed: " + error.message);
-
+      const filePath = await uploadAdCreative(file, pubId, frameKey);
       setPublisherDetails((prev) => {
         const existing = prev[pubId] || {};
         const uploads = existing.uploads || {};
@@ -149,21 +159,47 @@ export default function CreateCampaign({ session }) {
           },
         };
       });
-
-      alert(`File uploaded successfully: ${filePath}`);
+      const publicUrl = getPublicUrl(filePath);
+      alert(`File uploaded successfully:\n${publicUrl}`);
     } catch (err) {
       setError(err.message);
     }
   }
 
-  // ---------------------------
-  // E. FINAL SUBMISSION
-  // ---------------------------
+  // ---- UPDATED finalSubmit FUNCTION WITH LOGGING ----
   async function finalSubmit() {
     setError(null);
     if (!session || !session.user) {
       setError("User not authenticated.");
       return;
+    }
+
+    for (const pub of selectedPublishers) {
+      const pubId = pub.id;
+      const framesChosen = publisherDetails[pubId]?.framesChosen || {};
+      const selectedFrames = Object.entries(framesChosen)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([frameKey]) => frameKey);
+
+      for (const frameKey of selectedFrames) {
+        const { data: isVacant, error: validationError } = await supabase
+          .rpc("is_frame_vacant", {
+            p_listing_id: pubId,
+            p_frame_key: frameKey,
+          });
+
+        if (validationError) {
+          setError("Error validating frame availability: " + validationError.message);
+          return;
+        }
+        if (!isVacant) {
+          setError(
+            `Frame ${frameKey} in listing ${pub.website} is no longer available. ` +
+              "Please go back and select a different frame."
+          );
+          return;
+        }
+      }
     }
 
     const payload = {
@@ -194,25 +230,64 @@ export default function CreateCampaign({ session }) {
     };
 
     try {
-      const { data, error } = await supabase.from("campaigns").insert([payload]);
-      if (error) throw error;
+      console.log("Creating campaign with payload:", payload);
+      const { data: campaignData, error: campaignError } = await supabase
+        .from("campaigns")
+        .insert([payload])
+        .select()
+        .single();
+      if (campaignError) throw campaignError;
+      console.log("Campaign created:", campaignData);
+
+      // Insert frames into the frames table
+      for (const pub of selectedPublishers) {
+        const pubId = pub.id;
+        const framesChosen = publisherDetails[pubId]?.framesChosen || {};
+        console.log("Frames chosen for publisher", pubId, ":", framesChosen);
+        const purchasedFrames = Object.entries(framesChosen)
+          .filter(([_, isSelected]) => isSelected)
+          .map(([frameKey]) => {
+            const frameData = pub.selected_frames?.[frameKey] || {};
+            return {
+              frame_id: frameKey,
+              campaign_id: campaignData.id,
+              listing_id: pubId,
+              publisher_id: pubId,
+              size: frameData.size || "Unknown Dimensions",
+              uploaded_file: publisherDetails[pubId]?.uploads?.[frameKey] || null,
+              price_per_click: frameData.pricePerClick || "0.00",
+            };
+          });
+
+        console.log("Purchased frames to insert:", purchasedFrames);
+        if (purchasedFrames.length > 0) {
+          const { data: frameData, error: frameError } = await supabase
+            .from("frames")
+            .insert(purchasedFrames)
+            .select();
+          if (frameError) throw frameError;
+          console.log("Frames inserted:", frameData);
+        } else {
+          console.log("No frames to insert for publisher", pubId);
+        }
+      }
+
       setSubmitted(true);
     } catch (err) {
       setError(err.message);
+      console.error("Error in finalSubmit:", err);
     }
   }
+  // ---- END UPDATED FUNCTION ----
 
   // Convert file path to public URL
   function getPublicUrl(filePath) {
     return `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${filePath}`;
   }
 
-  // ---------------------------
-  // F. RENDER STEPS
-  // ---------------------------
+  // Render steps
   function renderStep() {
     switch (step) {
-      // STEP 1: SELECT PUBLISHER CATEGORY
       case 1:
         return (
           <div className="space-y-6 p-6 bg-white shadow-md rounded-xl">
@@ -271,20 +346,21 @@ export default function CreateCampaign({ session }) {
                         </span>
                       </label>
 
-                      {/* Show frames if present */}
                       {pub.selected_frames && Object.keys(pub.selected_frames).length > 0 && (
                         <div className="ml-6 mt-2">
-                          <strong>Ad Frames & Prices:</strong>
+                          <strong>Vacant Ad Frames & Prices:</strong>
                           <ul className="list-disc list-inside">
-                            {Object.entries(pub.selected_frames).map(([frameKey, frameData]) => {
-                              const dim = frameData.size || "Unknown Dimensions";
-                              const ppc = frameData.pricePerClick || "0.00";
-                              return (
-                                <li key={frameKey}>
-                                  {dim} - ${ppc} (Frame: {frameKey})
-                                </li>
-                              );
-                            })}
+                            {Object.entries(pub.selected_frames).map(
+                              ([frameKey, frameData]) => {
+                                const dim = frameData.size || "Unknown Dimensions";
+                                const ppc = frameData.pricePerClick || "0.00";
+                                return (
+                                  <li key={frameKey}>
+                                    {dim} - ${ppc} (Frame: {frameKey})
+                                  </li>
+                                );
+                              }
+                            )}
                           </ul>
                         </div>
                       )}
@@ -292,7 +368,7 @@ export default function CreateCampaign({ session }) {
                   ))}
                 </div>
               ) : (
-                <p>No publishers found for this category.</p>
+                <p>No publishers with vacant frames found for this category.</p>
               )}
             </div>
 
@@ -300,6 +376,7 @@ export default function CreateCampaign({ session }) {
               <button
                 onClick={() => setStep(2)}
                 className="bg-green-600 text-white px-4 py-2 rounded"
+                disabled={selectedPublishers.length === 0}
               >
                 Next
               </button>
@@ -307,12 +384,10 @@ export default function CreateCampaign({ session }) {
           </div>
         );
 
-      // STEP 2: ENTER CAMPAIGN DETAILS
       case 2:
         return (
           <div className="space-y-6 p-6 bg-white shadow-md rounded-xl">
             <h2 className="text-2xl font-semibold">Step 2: Enter Campaign Details</h2>
-
             <div>
               <label className="block font-medium">
                 Campaign Title:
@@ -326,7 +401,6 @@ export default function CreateCampaign({ session }) {
                 />
               </label>
             </div>
-
             <div>
               <label className="block font-medium">
                 Campaign Budget ($):
@@ -339,7 +413,6 @@ export default function CreateCampaign({ session }) {
                 />
               </label>
             </div>
-
             <div>
               <label className="block font-medium">
                 Daily Spend Limit ($):
@@ -352,7 +425,6 @@ export default function CreateCampaign({ session }) {
                 />
               </label>
             </div>
-
             <div>
               <label className="block font-medium">
                 Target URL:
@@ -366,7 +438,6 @@ export default function CreateCampaign({ session }) {
                 />
               </label>
             </div>
-
             <div>
               <label className="block font-medium mb-1">End Date:</label>
               <div className="flex items-center space-x-4">
@@ -399,7 +470,6 @@ export default function CreateCampaign({ session }) {
                 </div>
               </div>
             </div>
-
             <div className="flex justify-between mt-4">
               <button
                 onClick={() => setStep(1)}
@@ -417,7 +487,6 @@ export default function CreateCampaign({ session }) {
           </div>
         );
 
-      // STEP 3: PUBLISHER-SPECIFIC DETAILS
       case 3:
         return (
           <div className="space-y-6 p-6 bg-white shadow-md rounded-xl">
@@ -447,7 +516,6 @@ export default function CreateCampaign({ session }) {
                         "No URL"
                       )}
                     </p>
-
                     {Object.keys(frames).length > 0 ? (
                       <div className="ml-4 mt-2">
                         <strong>Select Frames to Purchase:</strong>
@@ -485,7 +553,7 @@ export default function CreateCampaign({ session }) {
                         </ul>
                       </div>
                     ) : (
-                      <p className="mt-2">No frames set by this publisher.</p>
+                      <p className="mt-2">No vacant frames available for this publisher.</p>
                     )}
                   </div>
                 );
@@ -493,7 +561,6 @@ export default function CreateCampaign({ session }) {
             ) : (
               <p>No publishers selected.</p>
             )}
-
             <div className="flex justify-between">
               <button
                 onClick={() => setStep(2)}
@@ -511,24 +578,15 @@ export default function CreateCampaign({ session }) {
           </div>
         );
 
-      // STEP 4: REVIEW CAMPAIGN DETAILS
       case 4:
         return (
           <div className="space-y-6 p-6 bg-white shadow-md rounded-xl">
             <h2 className="text-2xl font-semibold">Step 4: Review Campaign Details</h2>
-
-            {/* Campaign Info */}
             <div className="border p-4 rounded shadow bg-gray-50">
               <h3 className="font-bold text-xl mb-2">Campaign Details</h3>
-              <p>
-                <strong>Title:</strong> {campaignDetails.title}
-              </p>
-              <p>
-                <strong>Budget:</strong> ${campaignDetails.budget}
-              </p>
-              <p>
-                <strong>Daily Spend Limit:</strong> ${campaignDetails.dailyLimit}
-              </p>
+              <p><strong>Title:</strong> {campaignDetails.title}</p>
+              <p><strong>Budget:</strong> ${campaignDetails.budget}</p>
+              <p><strong>Daily Spend Limit:</strong> ${campaignDetails.dailyLimit}</p>
               <p>
                 <strong>Target URL:</strong>{" "}
                 {campaignDetails.targetURL ? (
@@ -549,58 +607,76 @@ export default function CreateCampaign({ session }) {
                 {campaignDetails.endDate.month}-{campaignDetails.endDate.day}
               </p>
             </div>
-
-            {/* Publishers */}
             <div className="border p-4 rounded shadow bg-gray-50">
               <h3 className="font-bold text-xl mb-2">Selected Publishers</h3>
-              {selectedPublishers.map((pub) => (
-                <div key={pub.id} className="border p-2 rounded mb-2 bg-white">
-                  <p>
-                    <strong>Website:</strong>{" "}
-                    {pub.website ? (
-                      <a
-                        href={pub.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 underline"
-                      >
-                        {pub.website}
-                      </a>
+              {selectedPublishers.map((pub) => {
+                const pubId = pub.id;
+                const framesChosen = publisherDetails[pubId]?.framesChosen || {};
+                const selectedFrames = Object.entries(framesChosen)
+                  .filter(([_, isSelected]) => isSelected)
+                  .map(([frameKey]) => frameKey);
+
+                return (
+                  <div key={pubId} className="border p-2 rounded mb-2 bg-white">
+                    <p>
+                      <strong>Website:</strong>{" "}
+                      {pub.website ? (
+                        <a
+                          href={pub.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 underline"
+                        >
+                          {pub.website}
+                        </a>
+                      ) : (
+                        "No URL"
+                      )}
+                    </p>
+                    {selectedFrames.length > 0 ? (
+                      <div className="mt-2">
+                        <strong>Selected Ad Frames and Uploads:</strong>
+                        <ul className="list-disc list-inside ml-4">
+                          {selectedFrames.map((frameKey) => {
+                            const frameData = pub.selected_frames?.[frameKey] || {};
+                            const size = frameData.size || "Unknown Dimensions";
+                            const uploadedFile = publisherDetails[pubId]?.uploads?.[frameKey];
+                            const ppc = frameData.pricePerClick || "0.00";
+                            return (
+                              <li key={frameKey}>
+                                {size} - Price: ${ppc} (Frame: {frameKey})
+                                {uploadedFile ? (
+                                  <div className="mt-1">
+                                    <img
+                                      src={getPublicUrl(uploadedFile)}
+                                      alt={`${size} ad`}
+                                      className="max-w-xs border rounded"
+                                      onError={(e) =>
+                                        console.error(
+                                          `Failed to load image for ${frameKey}: ${getPublicUrl(
+                                            uploadedFile
+                                          )}`
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                ) : (
+                                  <p className="text-red-500 ml-4">
+                                    No ad creative uploaded for this frame.
+                                  </p>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
                     ) : (
-                      "No URL"
+                      <p className="mt-2">No frames selected for this publisher.</p>
                     )}
-                  </p>
-
-                  {pub.selected_frames && Object.keys(pub.selected_frames).length > 0 && (
-                    <div className="mt-2">
-                      <strong>Ad Frame Dimension(s) and Prices:</strong>
-                      <ul className="list-disc list-inside ml-4">
-                        {Object.entries(pub.selected_frames).map(([frameKey, frameData]) => {
-                          const size = frameData.size || "Unknown Dimensions";
-                          const uploadedFile = publisherDetails[pub.id]?.uploads?.[frameKey];
-                          const ppc = frameData.pricePerClick || "0.00";
-                          return (
-                            <li key={frameKey}>
-                              {size} - Price: ${ppc}
-                              {uploadedFile && (
-                                <div className="mt-1">
-                                  <img
-                                    src={getPublicUrl(uploadedFile)}
-                                    alt={`${size} ad`}
-                                    className="max-w-xs border rounded"
-                                  />
-                                </div>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
-
             <div className="flex justify-between">
               <button
                 onClick={() => setStep(3)}
@@ -618,7 +694,6 @@ export default function CreateCampaign({ session }) {
           </div>
         );
 
-      // STEP 5: FINAL SUBMISSION
       case 5:
         return (
           <div className="space-y-6 p-6 bg-white shadow-md rounded-xl">
@@ -638,9 +713,6 @@ export default function CreateCampaign({ session }) {
     }
   }
 
-  // ---------------------------
-  // G. MAIN RENDER
-  // ---------------------------
   return (
     <div className="p-6 max-w-5xl mx-auto my-10">
       <h1 className="text-3xl font-bold mb-6 text-center">Create Campaign</h1>
@@ -649,12 +721,3 @@ export default function CreateCampaign({ session }) {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-

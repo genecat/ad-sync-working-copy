@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 // Single Supabase client
 const supabase = createClient(
@@ -19,6 +19,7 @@ const availableFrames = [
 function CreateListingFinal({ session }) {
   console.log("CreateListingFinal loaded");
 
+  const navigate = useNavigate();
   const [listingDetails, setListingDetails] = useState({
     title: "",
     category: "",
@@ -29,6 +30,7 @@ function CreateListingFinal({ session }) {
   const [saveMessage, setSaveMessage] = useState("");
   const [listings, setListings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentListingId, setCurrentListingId] = useState(null);
 
   useEffect(() => {
     async function fetchListings() {
@@ -86,17 +88,39 @@ function CreateListingFinal({ session }) {
     }));
   };
 
-  const generateCode = (listingId) => {
+  const generateCode = () => {
     const baseUrl = "https://my-ad-agency.vercel.app";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
     Object.keys(selectedFrames).forEach((frameKey) => {
       const frameData = selectedFrames[frameKey];
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
-      code += `<iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
-      code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n\n`;
+      code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
+      code += `  <iframe src="${baseUrl}/serve-ad?frame=${frameKey}" `;
+      code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
+      code += `</div>\n`;
+      code += `<script>\n`;
+      code += `  (function() {\n`;
+      code += `    const frameId = "${frameKey}";\n`;
+      code += `    const adSlot = document.getElementById("ad-slot-${frameKey}");\n`;
+      code += `    async function checkAdStatus() {\n`;
+      code += `      try {\n`;
+      code += `        const response = await fetch(\`${baseUrl}/api/check-ad-status?frameId=\${frameId}\`);\n`;
+      code += `        const data = await response.json();\n`;
+      code += `        if (!data.isActive) {\n`;
+      code += `          adSlot.style.display = "none";\n`;
+      code += `        }\n`;
+      code += `      } catch (error) {\n`;
+      code += `        console.error("Error checking ad status:", error);\n`;
+      code += `        adSlot.style.display = "none";\n`;
+      code += `      }\n`;
+      code += `    }\n`;
+      code += `    checkAdStatus();\n`;
+      code += `    setInterval(checkAdStatus, 5 * 60 * 1000);\n`;
+      code += `  })();\n`;
+      code += `</script>\n`;
     });
-    code += "<!-- Ad Exchange Embed Code End -->";
+    code += "<!-- Ad Exchange Embed Code End -->\n";
     setEmbedCode(code);
   };
 
@@ -105,6 +129,21 @@ function CreateListingFinal({ session }) {
       setSaveMessage("You must be logged in to save a listing.");
       return;
     }
+    if (!listingDetails.title || !listingDetails.category || !listingDetails.website) {
+      setSaveMessage("Please fill in all fields.");
+      return;
+    }
+    if (Object.keys(selectedFrames).length === 0) {
+      setSaveMessage("Please select at least one ad frame.");
+      return;
+    }
+    for (const frameId in selectedFrames) {
+      if (!selectedFrames[frameId].pricePerClick) {
+        setSaveMessage(`Please enter a price for frame ${frameId}.`);
+        return;
+      }
+    }
+
     const payload = {
       publisher_id: session.user.id,
       title: listingDetails.title,
@@ -114,20 +153,67 @@ function CreateListingFinal({ session }) {
     };
 
     try {
-      const { data, error } = await supabase.from("listings").insert([payload]).select();
-      if (error) throw error;
-      setSaveMessage("Listing created successfully!");
-      console.log("New listing created:", data);
-      const newListingId = data[0].id; // Capture the new listing ID
+      // Check if a listing already exists for the website
+      const { data: existingListing, error: fetchError } = await supabase
+        .from("listings")
+        .select("id, selected_frames")
+        .eq("website", listingDetails.website)
+        .eq("publisher_id", session.user.id)
+        .single();
+
+      if (fetchError && fetchError.code !== "PGRST116") {
+        throw new Error("Error checking existing listing: " + fetchError.message);
+      }
+
+      if (existingListing) {
+        // Listing exists, update it by merging the new frames
+        const existingFrames = existingListing.selected_frames || {};
+        const updatedFrames = { ...existingFrames, ...selectedFrames };
+
+        const { data, error: updateError } = await supabase
+          .from("listings")
+          .update({
+            selected_frames: updatedFrames,
+            category: listingDetails.category,
+            title: listingDetails.title,
+          })
+          .eq("id", existingListing.id)
+          .select();
+
+        if (updateError) {
+          throw new Error("Error updating listing: " + updateError.message);
+        }
+        setSaveMessage("Listing updated successfully!");
+        const updatedListingId = existingListing.id;
+        setCurrentListingId(updatedListingId);
+        setListings((prev) =>
+          prev.map((listing) =>
+            listing.id === updatedListingId ? { ...listing, selected_frames: updatedFrames, category: listingDetails.category, title: listingDetails.title } : listing
+          )
+        );
+        generateCode();
+      } else {
+        // No existing listing, create a new one
+        const { data, error: insertError } = await supabase
+          .from("listings")
+          .insert([payload])
+          .select();
+
+        if (insertError) {
+          throw new Error("Error creating listing: " + insertError.message);
+        }
+        setSaveMessage("Listing created successfully!");
+        const newListingId = data[0].id;
+        setCurrentListingId(newListingId);
+        setListings((prev) => [...prev, data[0]]);
+        generateCode();
+      }
+
       setListingDetails({ title: "", category: "", website: "" });
       setSelectedFrames({});
-      if (data && data[0]) {
-        setListings((prev) => [...prev, data[0]]);
-        generateCode(newListingId); // Generate embed code with the new listing ID
-      }
     } catch (err) {
-      console.error("Error creating listing:", err);
-      setSaveMessage("Error creating listing: " + err.message);
+      console.error("Error saving listing:", err);
+      setSaveMessage("Error saving listing: " + err.message);
     }
   };
 
@@ -222,7 +308,7 @@ function CreateListingFinal({ session }) {
 
         <div className="flex flex-wrap items-center gap-4 mb-4">
           <button
-            onClick={generateCode}
+            onClick={() => generateCode()}
             className="bg-blue-600 text-white px-4 py-2 rounded"
           >
             Generate HTML Code

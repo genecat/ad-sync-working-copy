@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useNavigate } from "react-router-dom";
 
 const AuthForm = ({ session, setSession }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleSignIn = async (e) => {
     e.preventDefault();
@@ -22,9 +24,38 @@ const AuthForm = ({ session, setSession }) => {
     } else {
       setSession(data.session);
       console.log("Session set:", data.session);
+      // Check user role and redirect
+      await checkUserRoleAndRedirect(data.user.id);
     }
     setLoading(false);
   };
+
+  const checkUserRoleAndRedirect = async (userId) => {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+    if (error) {
+      console.error("Error fetching user role:", error.message);
+      setError("Error determining your role. Please contact support.");
+    } else if (profile.role === "advertiser") {
+      navigate("/advertiser-dashboard");
+    } else if (profile.role === "publisher") {
+      navigate("/publisher-dashboard");
+    } else {
+      console.log("Unknown role for user:", userId);
+      setError("Unknown role. Please ensure your profile is set up correctly.");
+      navigate("/");
+    }
+  };
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (session && session.user) {
+      checkUserRoleAndRedirect(session.user.id);
+    }
+  }, [session, navigate]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">

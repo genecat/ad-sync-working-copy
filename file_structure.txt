@@ -1,0 +1,79 @@
+.
+├── .DS_Store
+├── .gitignore
+├── .vercel
+│   ├── README.txt
+│   ├── cache
+│   └── project.json
+├── README.md
+├── api
+│   ├── .DS_Store
+│   ├── serve-ad
+│   │   └── [listingId].js
+│   ├── serve-campaign
+│   │   └── [campaignId].js
+│   ├── test.js
+│   └── track-click.js
+├── dist
+│   ├── assets
+│   │   ├── browser-Crw2_aDM.js
+│   │   ├── index-TSlM0FJM.css
+│   │   └── index-uk3jPmOn.js
+│   ├── index.html
+│   └── vite.svg
+├── eslint.config.js
+├── file_structure.txt
+├── index.html
+├── my-ad-agency-backup.tar.gz
+├── package-lock.json
+├── package.json
+├── postcss.config.js
+├── public
+│   └── vite.svg
+├── server.cjs
+├── server.log
+├── src
+│   ├── ModifyListing.jsx
+│   ├── assets
+│   │   └── react.svg
+│   ├── components
+│   │   ├── CreateListingFinal.jsx
+│   │   ├── ListingCard.tsx
+│   │   ├── ListingStatus.jsx
+│   │   ├── NewPublisherDashboard.tsx
+│   │   └── ui
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── dropdown-menu.tsx
+│   │       ├── skeleton.tsx
+│   │       └── tooltip.tsx
+│   ├── hooks
+│   │   └── use-toast.ts
+│   ├── lib
+│   │   ├── supabaseClient.js
+│   │   └── utils.ts
+│   ├── main.jsx
+│   ├── pages
+│   │   ├── AdvertiserDashboard.jsx
+│   │   ├── App.jsx
+│   │   ├── AuthForm.jsx
+│   │   ├── CampaignDashboard.jsx
+│   │   ├── CreateCampaign.jsx
+│   │   ├── DashboardLayout.jsx
+│   │   ├── LandingPage.jsx
+│   │   ├── ModifyListing.jsx
+│   │   ├── PublisherDashboard.jsx
+│   │   └── StylePlayground.jsx
+│   ├── styles
+│   │   ├── App.css
+│   │   └── index.css
+│   └── tests
+│       └── test-ad.html
+├── tailwind.config.js
+├── temp_ad_dashboard.txt
+├── test-ad.html
+├── testad3.html
+├── vercel.json
+└── vite.config.js
+
+18 directories, 59 files
