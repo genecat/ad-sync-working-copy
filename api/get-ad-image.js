@@ -14,7 +14,7 @@ export default async (req, res) => {
 
   const { data: frameData, error: frameError } = await supabase
     .from('frames')
-    .select('uploaded_file, campaign_id')
+    .select('uploaded_file, campaign_id, price_per_click')
     .eq('listing_id', listingId)
     .eq('frame_id', frameId)
     .single();
@@ -24,10 +24,11 @@ export default async (req, res) => {
 
   const campaignId = frameData.campaign_id;
   const imageUrl = frameData.uploaded_file;
+  const pricePerClick = parseFloat(frameData.price_per_click) || 0.24;
 
   const { data: campaignData, error: campaignError } = await supabase
     .from('campaigns')
-    .select('campaign_details')
+    .select('campaign_details, clicks, impressions, budget')
     .eq('id', campaignId)
     .single();
   if (campaignError || !campaignData) {
@@ -35,12 +36,31 @@ export default async (req, res) => {
   }
 
   const targetUrl = campaignData.campaign_details?.targetURL || 'https://mashdrop.com';
+  const budget = parseFloat(campaignData.campaign_details?.budget) || 0;
+  const endDate = campaignData.campaign_details?.endDate;
+  const clicks = campaignData.clicks || 0;
+  const impressions = campaignData.impressions || 0;
 
-  await supabase.rpc('increment_impression', {
-    p_listing_id: listingId,
-    p_frame: frameId,
-    p_campaign_id: campaignId
-  });
+  if (endDate) {
+    const campaignEndDate = new Date(endDate.year, endDate.month - 1, endDate.day);
+    const today = new Date();
+    if (today > campaignEndDate) {
+      return res.status(400).json({ error: 'Campaign has expired' });
+    }
+  }
+
+  const totalSpent = clicks * pricePerClick;
+  if (budget > 0 && totalSpent >= budget) {
+    return res.status(400).json({ error: 'Campaign budget exhausted' });
+  }
+
+  const { error: impressionError } = await supabase
+    .from('campaigns')
+    .update({ impressions: impressions + 1 })
+    .eq('id', campaignId);
+  if (impressionError) {
+    console.error('Error incrementing impression:', impressionError);
+  }
 
   res.status(200).json({ imageUrl, targetUrl, listingId, frameId, campaignId });
 };
