@@ -11,15 +11,36 @@ export default async (req, res) => {
   if (!listingId || !frameId) {
     return res.status(400).json({ error: 'Missing listingId or frameId' });
   }
-  const { data, error } = await supabase
+
+  const { data: frameData, error: frameError } = await supabase
     .from('frames')
-    .select('uploaded_file')
+    .select('uploaded_file, campaign_id')
     .eq('listing_id', listingId)
     .eq('frame_id', frameId)
     .single();
-  if (error || !data) {
+  if (frameError || !frameData) {
     return res.status(404).json({ error: 'Ad not found' });
   }
-  const imageUrl = data.uploaded_file;
-  res.status(200).json({ imageUrl });
+
+  const campaignId = frameData.campaign_id;
+  const imageUrl = frameData.uploaded_file;
+
+  const { data: campaignData, error: campaignError } = await supabase
+    .from('campaigns')
+    .select('campaign_details')
+    .eq('id', campaignId)
+    .single();
+  if (campaignError || !campaignData) {
+    return res.status(404).json({ error: 'Campaign not found' });
+  }
+
+  const targetUrl = campaignData.campaign_details?.targetURL || 'https://mashdrop.com';
+
+  await supabase.rpc('increment_impression', {
+    p_listing_id: listingId,
+    p_frame: frameId,
+    p_campaign_id: campaignId
+  });
+
+  res.status(200).json({ imageUrl, targetUrl, listingId, frameId, campaignId });
 };
