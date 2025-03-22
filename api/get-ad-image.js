@@ -20,6 +20,6 @@ export default async (req, res) => {
   if (error || !data) {
     return res.status(404).json({ error: 'Ad not found' });
   }
-  const imageUrl = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${data.uploaded_file}`;
+  const imageUrl = data.uploaded_file;
   res.status(200).json({ imageUrl });
 };
