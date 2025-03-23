@@ -1,206 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { Link } from 'react-router-dom';
+import React from "react";
+import { Link } from "react-router-dom";
+import { useAdvertiserDashboardData } from "../hooks/useAdvertiserDashboardData";
 
 function AdvertiserDashboard({ session }) {
-  const [campaigns, setCampaigns] = useState([]);
-  const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    totalCampaigns: 0,
-    totalClicks: 0,
-    avgCostPerClick: 0,
-    totalBudget: 0,
-    totalSpent: 0,
-    totalRemaining: 0,
-    totalImpressions: 0,
-  });
-  const [loading, setLoading] = useState(true);
+  const { campaigns, stats, isLoading, error } = useAdvertiserDashboardData();
 
-  useEffect(() => {
-    if (!session || !session.user || !session.user.id) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchCampaigns = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Fetch campaigns
-        const { data: campaignsData, error: campaignError } = await supabase
-          .from('campaigns')
-          .select('*')
-          .eq('advertiser_id', session.user.id);
-        if (campaignError) throw campaignError;
-        console.log('All Campaigns Data:', campaignsData);
-        if (!campaignsData || campaignsData.length === 0) {
-          setCampaigns([]);
-          setStats(prev => ({ ...prev, totalCampaigns: 0 }));
-          setLoading(false);
-          return;
-        }
-
-        // Remove duplicates based on campaign name or title
-        const uniqueCampaigns = [];
-        const seenTitles = new Set();
-        campaignsData.forEach(campaign => {
-          const title = campaign.campaign_details?.title || campaign.name || campaign.id;
-          if (!seenTitles.has(title)) {
-            seenTitles.add(title);
-            uniqueCampaigns.push(campaign);
-          } else {
-            console.warn(`Duplicate campaign detected and skipped: ${title}`);
-          }
-        });
-        console.log('Unique Campaigns:', uniqueCampaigns);
-
-        // Set total campaigns count
-        setStats(prev => ({ ...prev, totalCampaigns: uniqueCampaigns.length }));
-
-        // Extract listing IDs from selected_publishers
-        const listingIds = uniqueCampaigns.flatMap(campaign =>
-          (campaign.selected_publishers || []).map(publisher => publisher.id).filter(Boolean)
-        );
-        console.log('Listing IDs from selected_publishers:', listingIds);
-        if (listingIds.length === 0) {
-          console.warn('No listing IDs found in selected_publishers');
-          setCampaigns(uniqueCampaigns.map(campaign => ({ ...campaign, clicks: 0, impressions: 0 })));
-          setLoading(false);
-          return;
-        }
-
-        // Fetch ad_stats
-        const { data: statsData, error: statsError } = await supabase
-          .from('ad_stats')
-          .select('listing_id, frame, impression_count, click_count')
-          .in('listing_id', listingIds);
-        if (statsError) {
-          console.error('Stats fetch error:', statsError.message);
-          throw statsError;
-        }
-        console.log('All ad_stats Data:', statsData);
-
-        // Aggregate stats by listing_id
-        const statsMap = {};
-        statsData.forEach(stat => {
-          if (!statsMap[stat.listing_id]) {
-            statsMap[stat.listing_id] = { impression_count: 0, click_count: 0 };
-          }
-          statsMap[stat.listing_id].impression_count += stat.impression_count || 0;
-          statsMap[stat.listing_id].click_count += stat.click_count || 0;
-        });
-        console.log('Stats Map (by listing_id):', statsMap);
-
-        // Update campaigns with stats
-        const updatedCampaigns = uniqueCampaigns.map(campaign => {
-          let campaignClicks = 0;
-          let campaignImpressions = 0;
-          (campaign.selected_publishers || []).forEach(publisher => {
-            const listingId = publisher.id;
-            const listingStats = statsMap[listingId];
-            if (listingStats) {
-              campaignClicks += listingStats.click_count;
-              campaignImpressions += listingStats.impression_count;
-            } else {
-              console.warn(`No stats found for listing_id: ${listingId} in campaign ${campaign.id}`);
-            }
-          });
-          console.log(`Campaign ${campaign.id} - Clicks: ${campaignClicks}, Impressions: ${campaignImpressions}`);
-          return { ...campaign, clicks: campaignClicks, impressions: campaignImpressions };
-        });
-
-        calculateStats(updatedCampaigns);
-      } catch (err) {
-        setError(err.message);
-        console.error('Fetch error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCampaigns();
-  }, [session]);
-
-  const calculateStats = (campaigns) => {
-    let totalClicks = 0;
-    let totalSpent = 0;
-    let totalBudget = 0;
-    let totalImpressions = 0;
-
-    const updatedCampaigns = campaigns.map(campaign => {
-      const details = campaign.campaign_details || {};
-      const budget = parseFloat(details.budget) || 0;
-      const clicks = campaign.clicks || 0;
-      const impressions = campaign.impressions || 0;
-      let pricePerClick = 0;
-
-      if (Array.isArray(campaign.selected_publishers) && campaign.selected_publishers.length > 0) {
-        const firstPublisher = campaign.selected_publishers[0];
-        if (Array.isArray(firstPublisher.frames_purchased) && firstPublisher.frames_purchased.length > 0) {
-          pricePerClick = parseFloat(firstPublisher.frames_purchased[0].pricePerClick) || 0;
-        } else if (firstPublisher.extra_details?.framesChosen && Object.keys(firstPublisher.extra_details.framesChosen).length > 0) {
-          const firstFrame = Object.values(firstPublisher.extra_details.framesChosen)[0];
-          pricePerClick = parseFloat(firstFrame.pricePerClick) || 0;
-        }
-      }
-
-      const campaignTotalSpent = clicks * pricePerClick;
-      totalClicks += clicks;
-      totalSpent += campaignTotalSpent;
-      totalBudget += budget;
-      totalImpressions += impressions;
-
-      // Determine if the campaign is active
-      const currentDate = new Date();
-      const createdAt = new Date(campaign.created_at);
-      const endDate = details.endDate
-        ? new Date(
-            `${details.endDate.year}-${String(details.endDate.month).padStart(2, '0')}-${String(details.endDate.day).padStart(2, '0')}`
-          )
-        : null;
-
-      // Debug logs
-      console.log(`Campaign ${campaign.id}:`);
-      console.log(`  Current Date: ${currentDate}`);
-      console.log(`  Created At: ${createdAt}`);
-      console.log(`  End Date: ${endDate}`);
-      console.log(`  Budget: ${budget}, Total Spent: ${campaignTotalSpent}`);
-
-      const isWithinDateRange =
-        createdAt <= currentDate && (!endDate || endDate >= currentDate);
-      const isWithinBudget = campaignTotalSpent < budget;
-      const isActive = isWithinDateRange && isWithinBudget;
-
-      console.log(`  isWithinDateRange: ${isWithinDateRange}`);
-      console.log(`  isWithinBudget: ${isWithinBudget}`);
-      console.log(`  isActive: ${isActive}`);
-
-      return {
-        ...campaign,
-        clicks,
-        impressions,
-        pricePerClick,
-        isActive,
-      };
-    });
-
-    const avgCostPerClick = totalClicks > 0 ? (totalSpent / totalClicks).toFixed(2) : "0.00";
-    const totalRemaining = Math.max(0, totalBudget - totalSpent);
-
-    setCampaigns(updatedCampaigns);
-    setStats(prev => ({
-      ...prev,
-      totalClicks,
-      avgCostPerClick,
-      totalBudget,
-      totalSpent,
-      totalRemaining,
-      totalImpressions,
-    }));
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="max-w-5xl mx-auto my-10 px-4 bg-modern-bg text-modern-text">
         <h1 className="text-3xl font-bold mb-6">Advertiser Dashboard</h1>
@@ -232,7 +37,7 @@ function AdvertiserDashboard({ session }) {
         {[
           { title: "Total Campaigns", value: stats.totalCampaigns },
           { title: "Total Clicks", value: stats.totalClicks },
-          { title: "Avg. Cost Per Click", value: `$${stats.avgCostPerClick}` },
+          { title: "Avg. Cost Per Click", value: `$${stats.avgCostPerClick.toFixed(2)}` },
           { title: "Total Budget", value: `$${stats.totalBudget.toFixed(2)}` },
           { title: "Total Spent", value: `$${stats.totalSpent.toFixed(2)}` },
           { title: "Total Remaining", value: `$${stats.totalRemaining.toFixed(2)}` },
@@ -276,9 +81,9 @@ function AdvertiserDashboard({ session }) {
                   <h3 className="text-xl font-semibold flex-grow">{campaignName}</h3>
                   <span
                     className={`inline-block w-4 h-4 rounded-full mr-2 ${
-                      campaign.isActive ? 'bg-green-500' : 'bg-red-500'
+                      campaign.isActive ? "bg-green-500" : "bg-red-500"
                     }`}
-                    title={campaign.isActive ? 'Active' : 'Inactive'}
+                    title={campaign.isActive ? "Active" : "Inactive"}
                   ></span>
                 </div>
                 <p>Campaign ID: {campaign.id}</p>
