@@ -14,7 +14,7 @@ export default async (req, res) => {
 
   const { data: frameData, error: frameError } = await supabase
     .from('frames')
-    .select('uploaded_file, campaign_id, price_per_click')
+    .select('uploaded_file, campaign_id, price_per_click, publisher_id')
     .eq('listing_id', listingId)
     .eq('frame_id', frameId)
     .single();
@@ -25,10 +25,11 @@ export default async (req, res) => {
   const campaignId = frameData.campaign_id;
   const imageUrl = frameData.uploaded_file;
   const pricePerClick = parseFloat(frameData.price_per_click) || 0.24;
+  const publisherId = frameData.publisher_id;
 
   const { data: campaignData, error: campaignError } = await supabase
     .from('campaigns')
-    .select('campaign_details, clicks, impressions, budget')
+    .select('campaign_details, clicks, impressions, budget, advertiser_id')
     .eq('id', campaignId)
     .single();
   if (campaignError || !campaignData) {
@@ -40,6 +41,7 @@ export default async (req, res) => {
   const endDate = campaignData.campaign_details?.endDate;
   const clicks = campaignData.clicks || 0;
   const impressions = campaignData.impressions || 0;
+  const advertiserId = campaignData.advertiser_id;
 
   if (endDate) {
     const campaignEndDate = new Date(endDate.year, endDate.month - 1, endDate.day);
@@ -60,6 +62,39 @@ export default async (req, res) => {
     .eq('id', campaignId);
   if (impressionError) {
     console.error('Error incrementing impression:', impressionError);
+  }
+
+  const { data: publisherData, error: publisherError } = await supabase
+    .from('listings')
+    .select('publisher_id')
+    .eq('id', listingId)
+    .single();
+  if (publisherError || !publisherData) {
+    return res.status(404).json({ error: 'Publisher not found' });
+  }
+
+  const { error: publisherUpdateError } = await supabase
+    .from('publishers')
+    .upsert({
+      id: publisherId,
+      total_impressions: impressions + 1,
+      total_clicks: clicks,
+      total_earnings: clicks * pricePerClick
+    }, { onConflict: 'id' });
+  if (publisherUpdateError) {
+    console.error('Error updating publisher stats:', publisherUpdateError);
+  }
+
+  const { error: advertiserUpdateError } = await supabase
+    .from('advertisers')
+    .upsert({
+      id: advertiserId,
+      total_impressions: impressions + 1,
+      total_clicks: clicks,
+      total_spent: totalSpent
+    }, { onConflict: 'id' });
+  if (advertiserUpdateError) {
+    console.error('Error updating advertiser stats:', advertiserUpdateError);
   }
 
   res.status(200).json({ imageUrl, targetUrl, listingId, frameId, campaignId });
