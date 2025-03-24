@@ -22,7 +22,7 @@
     }
   ],
   "functions": {
-    "api/serve-ad.js": {
+    "api/serve-ad/[listingId].js": {
       "memory": 128,
       "maxDuration": 10
     },
