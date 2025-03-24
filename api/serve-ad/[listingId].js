@@ -109,7 +109,7 @@ export default async (req, res) => {
           if (e.target.tagName === 'IMG') {
             e.preventDefault();
             console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency-8pi84mba0-genecats-projects.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-k7r6odabn-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameRecord.campaign_id}' })
