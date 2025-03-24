@@ -10,18 +10,19 @@ export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  // Allow the response to be framed (remove X-Frame-Options: DENY)
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // Or remove this header entirely
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
 
   if (req.method === 'OPTIONS') {
+    console.log('Handling OPTIONS request');
     return res.status(200).end();
   }
 
+  const listingId = req.params.listingId;
   const frame = req.query.frame;
   const campaignId = req.query.campaignId;
 
   console.log("Request URL:", req.url);
-  console.log("Frame:", frame, "Campaign ID:", campaignId);
+  console.log("Listing ID:", listingId, "Frame:", frame, "Campaign ID:", campaignId);
 
   if (!frame) {
     console.log("Missing Frame Parameter:", { frame });
@@ -39,7 +40,7 @@ export default async (req, res) => {
   console.log("Frame Query Result:", { frameData, frameError });
 
   if (frameError) {
-    console.log("Frame Error:", frameError);
+    console.error("Frame Query Error:", frameError);
     res.status(404).send('Frame not found');
     return;
   }
@@ -61,11 +62,18 @@ export default async (req, res) => {
 
   console.log("Campaign Query Result:", { campaign, campaignError });
 
-  if (campaignError || !campaign) {
-    console.log("Campaign Error:", campaignError);
+  if (campaignError) {
+    console.error("Campaign Query Error:", campaignError);
     res.status(404).send('Campaign not found');
     return;
   }
+
+  if (!campaign) {
+    console.log("No campaign data found for campaign_id:", frameData.campaign_id);
+    res.status(404).send('Campaign not found');
+    return;
+  }
+
   console.log("Campaign Data:", campaign);
 
   // Check if campaign is active based on endDate
@@ -75,7 +83,9 @@ export default async (req, res) => {
     campaign.campaign_details.endDate.day
   );
   const today = new Date();
+  console.log("End Date:", endDate, "Today:", today);
   if (endDate < today) {
+    console.log("Campaign has expired. End Date:", endDate, "Today:", today);
     res.status(400).send('Campaign has expired');
     return;
   }
@@ -96,7 +106,7 @@ export default async (req, res) => {
           if (e.target.tagName === 'IMG') {
             e.preventDefault();
             console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency-cjqks78yu-genecats-projects.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-4cp5fy4ca-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameData.campaign_id}' })
