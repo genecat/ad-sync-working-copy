@@ -34,21 +34,21 @@ export default async (req, res) => {
   }
 
   // Fetch frame data from the frames table
+  console.log("Querying frames table with frame_id:", frame);
   const { data: frameData, error: frameError } = await supabase
     .from('frames')
     .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
-    .eq('frame_id', frame)
-    .single();
+    .eq('frame_id', frame);
 
   console.log("Frame Query Result:", { frameData, frameError });
 
   if (frameError) {
     console.error("Frame Query Error:", frameError);
-    res.status(404).send('Frame not found');
+    res.status(500).send('Error fetching frame data');
     return;
   }
 
-  if (!frameData) {
+  if (!frameData || frameData.length === 0) {
     console.log("No frame data found for frame:", frame);
     res.status(404).send('Frame not found');
     return;
