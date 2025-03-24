@@ -17,7 +17,6 @@ export default async (req, res) => {
     return res.status(200).end();
   }
 
-  console.log("Full Request Object:", JSON.stringify(req, null, 2));
   const listingId = req.params?.listingId || req.query?.listingId;
   const frame = req.query.frame;
   const campaignId = req.query.campaignId;
@@ -54,13 +53,15 @@ export default async (req, res) => {
     return;
   }
 
-  console.log("Frame Data:", frameData);
+  // Since frameData is an array, take the first element
+  const frameRecord = frameData[0];
+  console.log("Frame Data:", frameRecord);
 
   // Fetch campaign data to get target URL and check if active
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
     .select('id, campaign_details')
-    .eq('id', frameData.campaign_id)
+    .eq('id', frameRecord.campaign_id)
     .single();
 
   console.log("Campaign Query Result:", { campaign, campaignError });
@@ -72,7 +73,7 @@ export default async (req, res) => {
   }
 
   if (!campaign) {
-    console.log("No campaign data found for campaign_id:", frameData.campaign_id);
+    console.log("No campaign data found for campaign_id:", frameRecord.campaign_id);
     res.status(404).send('Campaign not found');
     return;
   }
@@ -93,7 +94,7 @@ export default async (req, res) => {
     return;
   }
 
-  const imageUrl = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frameData.uploaded_file}`;
+  const imageUrl = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frameRecord.uploaded_file}`;
   const targetUrl = campaign.campaign_details.targetURL || "https://mashdrop.com";
 
   console.log("Final Image URL:", imageUrl);
@@ -109,10 +110,10 @@ export default async (req, res) => {
           if (e.target.tagName === 'IMG') {
             e.preventDefault();
             console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency-7fuf6dy98-genecats-projects.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-8pi84mba0-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameData.campaign_id}' })
+              body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameRecord.campaign_id}' })
             }).then(response => {
               if (response.ok) {
                 window.open('${targetUrl}', '_blank');
@@ -127,7 +128,7 @@ export default async (req, res) => {
       </script>
     </head>
     <body>
-      <img src="${imageUrl}" width="${frameData.size.split('x')[0]}" height="${frameData.size.split('x')[1]}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for Frame ${frame}" />
+      <img src="${imageUrl}" width="${frameRecord.size.split('x')[0]}" height="${frameRecord.size.split('x')[1]}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for Frame ${frame}" />
     </body>
     </html>
   `);
