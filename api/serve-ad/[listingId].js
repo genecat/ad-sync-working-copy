@@ -17,11 +17,14 @@ export default async (req, res) => {
     return res.status(200).end();
   }
 
-  const listingId = req.params.listingId;
+  console.log("Full Request Object:", JSON.stringify(req, null, 2));
+  const listingId = req.params?.listingId || req.query?.listingId;
   const frame = req.query.frame;
   const campaignId = req.query.campaignId;
 
   console.log("Request URL:", req.url);
+  console.log("req.params:", req.params);
+  console.log("req.query:", req.query);
   console.log("Listing ID:", listingId, "Frame:", frame, "Campaign ID:", campaignId);
 
   if (!frame) {
@@ -106,7 +109,7 @@ export default async (req, res) => {
           if (e.target.tagName === 'IMG') {
             e.preventDefault();
             console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency-4cp5fy4ca-genecats-projects.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-7fuf6dy98-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameData.campaign_id}' })
