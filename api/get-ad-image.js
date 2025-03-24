@@ -14,7 +14,7 @@ export default async (req, res) => {
 
   const { data: frameData, error: frameError } = await supabase
     .from('frames')
-    .select('uploaded_file, campaign_id, price_per_click, publisher_id')
+    .select('uploaded_file, campaign_id, price_per_click')
     .eq('listing_id', listingId)
     .eq('frame_id', frameId)
     .single();
@@ -25,7 +25,16 @@ export default async (req, res) => {
   const campaignId = frameData.campaign_id;
   const imageUrl = frameData.uploaded_file;
   const pricePerClick = parseFloat(frameData.price_per_click) || 0.24;
-  const publisherId = frameData.publisher_id;
+
+  const { data: listingData, error: listingError } = await supabase
+    .from('listings')
+    .select('publisher_id')
+    .eq('id', listingId)
+    .single();
+  if (listingError || !listingData) {
+    return res.status(404).json({ error: 'Listing not found' });
+  }
+  const publisherId = listingData.publisher_id;
 
   const { data: campaignData, error: campaignError } = await supabase
     .from('campaigns')
@@ -64,34 +73,57 @@ export default async (req, res) => {
     console.error('Error incrementing impression:', impressionError);
   }
 
-  const { data: publisherData, error: publisherError } = await supabase
-    .from('listings')
-    .select('publisher_id')
-    .eq('id', listingId)
+  const { data: publisherStats, error: publisherStatsError } = await supabase
+    .from('publishers')
+    .select('total_impressions, total_clicks, total_earnings')
+    .eq('id', publisherId)
     .single();
-  if (publisherError || !publisherData) {
-    return res.status(404).json({ error: 'Publisher not found' });
+
+  let newImpressions = 1;
+  let newClicks = 0;
+  let newEarnings = 0;
+
+  if (publisherStats) {
+    newImpressions += publisherStats.total_impressions || 0;
+    newClicks = publisherStats.total_clicks || 0;
+    newEarnings = publisherStats.total_earnings || 0;
   }
 
   const { error: publisherUpdateError } = await supabase
     .from('publishers')
     .upsert({
       id: publisherId,
-      total_impressions: impressions + 1,
-      total_clicks: clicks,
-      total_earnings: clicks * pricePerClick
+      total_impressions: newImpressions,
+      total_clicks: newClicks,
+      total_earnings: newEarnings
     }, { onConflict: 'id' });
   if (publisherUpdateError) {
     console.error('Error updating publisher stats:', publisherUpdateError);
+  }
+
+  const { data: advertiserStats, error: advertiserStatsError } = await supabase
+    .from('advertisers')
+    .select('total_impressions, total_clicks, total_spent')
+    .eq('id', advertiserId)
+    .single();
+
+  let advImpressions = 1;
+  let advClicks = clicks;
+  let advSpent = totalSpent;
+
+  if (advertiserStats) {
+    advImpressions += advertiserStats.total_impressions || 0;
+    advClicks = advertiserStats.total_clicks || 0;
+    advSpent = advertiserStats.total_spent || 0;
   }
 
   const { error: advertiserUpdateError } = await supabase
     .from('advertisers')
     .upsert({
       id: advertiserId,
-      total_impressions: impressions + 1,
-      total_clicks: clicks,
-      total_spent: totalSpent
+      total_impressions: advImpressions,
+      total_clicks: advClicks,
+      total_spent: advSpent
     }, { onConflict: 'id' });
   if (advertiserUpdateError) {
     console.error('Error updating advertiser stats:', advertiserUpdateError);

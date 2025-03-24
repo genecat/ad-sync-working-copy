@@ -16,7 +16,7 @@ const availableFrames = [
 ];
 
 const ModifyListing = ({ session }) => {
-  const { listingId } = useParams();
+  const { id } = useParams();
   const navigate = useNavigate();
   const [listing, setListing] = useState(null);
   const [selectedFrames, setSelectedFrames] = useState({});
@@ -29,11 +29,11 @@ const ModifyListing = ({ session }) => {
   const [selectedFrameToCopy, setSelectedFrameToCopy] = useState('all');
 
   useEffect(() => {
-    console.log("ModifyListing component mounted with listingId:", listingId);
+    console.log("ModifyListing component mounted with id:", id);
     console.log("Session:", session);
 
-    if (!listingId) {
-      console.error("No listingId provided in URL");
+    if (!id) {
+      console.error("No id provided in URL");
       setError("Invalid listing ID");
       return;
     }
@@ -46,18 +46,18 @@ const ModifyListing = ({ session }) => {
 
     async function fetchListing() {
       try {
-        console.log("Fetching listing for ID:", listingId);
+        console.log("Fetching listing for ID:", id);
         const { data, error } = await supabase
           .from('listings')
           .select('*')
-          .eq('id', listingId)
+          .eq('id', id)
           .single();
         if (error) {
           console.error('Error fetching listing:', error);
           throw new Error('Error fetching listing: ' + error.message);
         }
         if (!data) {
-          console.error('No listing found for ID:', listingId);
+          console.error('No listing found for ID:', id);
           throw new Error('Listing not found');
         }
         console.log("Fetched listing data:", data);
@@ -80,7 +80,7 @@ const ModifyListing = ({ session }) => {
       }
     }
     fetchListing();
-  }, [listingId, session]);
+  }, [id, session]);
 
   const handleFramePriceChange = (frameKey, newPrice) => {
     setSelectedFrames((prev) => {
@@ -97,7 +97,9 @@ const ModifyListing = ({ session }) => {
   };
 
   const addFrame = (size, price) => {
+    console.log("Adding new frame - Size:", size, "Price:", price);
     if (!price) {
+      console.error("No price provided for new frame");
       setError('Please enter a price per click for the new frame.');
       return;
     }
@@ -107,6 +109,7 @@ const ModifyListing = ({ session }) => {
         ...prev,
         [frameKey]: { size, pricePerClick: price },
       };
+      console.log("Updated selectedFrames after adding:", updatedFrames);
       generateCode(updatedFrames);
       return updatedFrames;
     });
@@ -125,8 +128,8 @@ const ModifyListing = ({ session }) => {
 
   const generateCode = (frames) => {
     console.log("Generating embed code for frames:", frames);
-    if (!listingId) {
-      console.error("Cannot generate embed code: listingId is not defined");
+    if (!id) {
+      console.error("Cannot generate embed code: id is not defined");
       setError("Cannot generate embed code: Invalid listing ID");
       return;
     }
@@ -137,12 +140,12 @@ const ModifyListing = ({ session }) => {
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
       code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
-      code += `  <iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
+      code += `  <iframe src="${baseUrl}/serve-ad/${id}?frame=${frameKey}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
       code += `</div>\n`;
       code += `<script>\n`;
       code += `  (function() {\n`;
-      code += `    const listingId = "${listingId}";\n`;
+      code += `    const listingId = "${id}";\n`;
       code += `    const frameId = "${frameKey}";\n`;
       code += `    const adSlot = document.getElementById("ad-slot-${frameKey}");\n`;
       code += `    async function checkAdStatus() {\n`;
@@ -167,8 +170,8 @@ const ModifyListing = ({ session }) => {
   };
 
   const generateCodeForSelected = () => {
-    if (!listingId) {
-      console.error("Cannot generate embed code: listingId is not defined");
+    if (!id) {
+      console.error("Cannot generate embed code: id is not defined");
       setError("Cannot generate embed code: Invalid listing ID");
       return;
     }
@@ -184,12 +187,12 @@ const ModifyListing = ({ session }) => {
       const [width, height] = size.split("x");
       let code = `<!-- Ad Exchange Embed Code Start -->\n`;
       code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
-      code += `  <iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
+      code += `  <iframe src="${baseUrl}/serve-ad/${id}?frame=${frameKey}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
       code += `</div>\n`;
       code += `<script>\n`;
       code += `  (function() {\n`;
-      code += `    const listingId = "${listingId}";\n`;
+      code += `    const listingId = "${id}";\n`;
       code += `    const frameId = "${frameKey}";\n`;
       code += `    const adSlot = document.getElementById("ad-slot-${frameKey}");\n`;
       code += `    async function checkAdStatus() {\n`;
@@ -221,20 +224,22 @@ const ModifyListing = ({ session }) => {
       category: category,
     };
     try {
+      console.log("Sending update to Supabase with ID:", id, "Payload:", payload);
       const { error } = await supabase
         .from('listings')
         .update(payload)
-        .eq('id', listingId);
+        .eq('id', id);
       if (error) {
-        console.error('Error updating listing:', error);
+        console.error('Supabase update error:', error);
         throw new Error('Error updating listing: ' + error.message);
       }
+      console.log("Update successful, setting success message");
       setMessage('Listing updated successfully!');
       console.log("Listing updated successfully with payload:", payload);
       generateCode(selectedFrames);
     } catch (err) {
       console.error("Submit error:", err);
-      setError(err.message);
+      setError(err.message || 'Failed to save listing. Please try again.');
     }
   };
 
@@ -351,9 +356,9 @@ const ModifyListing = ({ session }) => {
               className="border p-2 w-full bg-gray-100 text-black rounded mb-2"
             >
               <option value="all">All Frames</option>
-              {Object.keys(selectedFrames).map((frameKey) => (
+              {Object.keys(selectedFrames).map((frameKey, index) => (
                 <option key={frameKey} value={frameKey}>
-                  {frameKey} ({selectedFrames[frameKey].size})
+                  Frame #{index + 1}: {frameKey} ({selectedFrames[frameKey].size})
                 </option>
               ))}
             </select>
@@ -400,7 +405,6 @@ const ModifyListing = ({ session }) => {
 };
 
 export default ModifyListing;
-
 
 
 

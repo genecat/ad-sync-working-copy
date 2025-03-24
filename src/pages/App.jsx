@@ -10,7 +10,8 @@ import AdvertiserDashboard from "./AdvertiserDashboard";
 import CreateCampaign from "./CreateCampaign";
 import CampaignDashboard from "./CampaignDashboard";
 import DashboardLayout from "./DashboardLayout";
-import ModifyListing from "./ModifyListing";
+import ModifyListing from "./ModifyListing"; // Replace EditListing with ModifyListing
+import ArchivePage from "./ArchivePage.jsx";
 
 function App() {
   const [session, setSession] = useState(null);
@@ -82,7 +83,7 @@ function App() {
               <Link to="/publisher-dashboard" className="text-white mr-4">Publisher Dashboard</Link>
               <Link to="/create-listing-final" className="text-white mr-4">Create Listing</Link>
               {listingId ? (
-                <Link to={`/modify-listing/${listingId}`} className="text-white">Modify Listing</Link>
+                <Link to={`/edit-listing/${listingId}`} className="text-white">Modify Listing</Link>
               ) : (
                 <span className="text-gray-500 mr-4">Modify Listing (No listings yet)</span>
               )}
@@ -92,7 +93,8 @@ function App() {
             <>
               <Link to="/advertiser-dashboard" className="text-white mr-4">Advertiser Dashboard</Link>
               <Link to="/create-campaign" className="text-white mr-4">Create Campaign</Link>
-              <Link to="/campaigns" className="text-white">Campaign Dashboard</Link>
+              <Link to="/campaigns" className="text-white mr-4">Campaign Dashboard</Link>
+              <Link to="/archive" className="text-white">Archive</Link>
             </>
           )}
         </div>
@@ -134,10 +136,10 @@ function App() {
           }
         />
         <Route
-          path="/modify-listing/:listingId"
+          path="/edit-listing/:id"
           element={
             session && role === "publisher" ? (
-              <ModifyListing session={session} />
+              <ModifyListing session={session} /> // Use ModifyListing
             ) : (
               <AuthForm setSession={setSession} />
             )
@@ -178,6 +180,16 @@ function App() {
           element={
             session && role === "advertiser" ? (
               <CampaignDashboard session={session} />
+            ) : (
+              <AuthForm setSession={setSession} />
+            )
+          }
+        />
+        <Route
+          path="/archive"
+          element={
+            session && (role === "advertiser" || role === "publisher") ? (
+              <ArchivePage session={session} />
             ) : (
               <AuthForm setSession={setSession} />
             )

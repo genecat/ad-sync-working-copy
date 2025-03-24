@@ -19,7 +19,10 @@ interface CampaignStat {
   impression_count: number;
   click_count: number;
   campaign_id: string;
-  campaigns: { name: string; termination_date?: string; creativeImage?: string } | null;
+  uploaded_file?: string;
+  pricePerClick?: number;
+  isActive: boolean; // Added to track campaign status
+  campaigns: { name: string; termination_date?: string; creativeImage?: string; budget?: string } | null;
 }
 
 export function usePublisherDashboardData() {
@@ -80,58 +83,88 @@ export function usePublisherDashboardData() {
 
         const listingIds = parsedListings.map((l: Listing) => l.id);
 
-        // Fetch ad_stats
-        const { data: statsData, error: statsError } = await supabase
-          .from("ad_stats")
-          .select("listing_id, frame, impression_count, click_count, campaign_id")
+        // Fetch campaign stats from frames and campaigns
+        const { data: campaignData, error: campaignError } = await supabase
+          .from("frames")
+          .select(`
+            listing_id,
+            frame_id,
+            campaign_id,
+            uploaded_file,
+            campaigns (
+              id,
+              name,
+              impressions,
+              clicks,
+              campaign_details,
+              is_active,
+              is_archived
+            )
+          `)
           .in("listing_id", listingIds);
-        if (statsError) throw new Error(`Stats fetch error: ${statsError.message}`);
+        if (campaignError) throw new Error(`Campaign fetch error: ${campaignError.message}`);
 
-        // Fetch campaigns
-        const { data: campaignsData, error: campaignsError } = await supabase
-          .from("campaigns")
-          .select("id, name, campaign_details");
-        if (campaignsError) throw new Error(`Campaigns fetch error: ${campaignsError.message}`);
+        const stats: CampaignStat[] = campaignData
+          ?.filter((frame: any) => {
+            const campaign = frame.campaigns;
+            // Filter out archived campaigns
+            if (campaign?.is_archived) return false;
+            // Only include campaigns that are active in the database
+            if (!campaign || !campaign.is_active) return false;
 
-        // Aggregate stats by frame
-        const aggregatedStats: { [key: string]: CampaignStat } = {};
-        statsData.forEach((stat: any) => {
-          const key = `${stat.listing_id}-${stat.frame}`;
-          if (!aggregatedStats[key]) {
-            aggregatedStats[key] = { ...stat, impression_count: 0, click_count: 0 };
-          }
-          aggregatedStats[key].impression_count += stat.impression_count || 0;
-          aggregatedStats[key].click_count += stat.click_count || 0;
-          if (stat.campaign_id !== "unknown") {
-            aggregatedStats[key].campaign_id = stat.campaign_id;
-          }
-        });
+            return true;
+          })
+          .map((frame: any) => {
+            const campaign = frame.campaigns;
+            // Find the listing to get the price per click
+            const listing = parsedListings.find((l: Listing) => l.id === frame.listing_id);
+            const frameData = listing?.selected_frames?.[frame.frame_id];
+            const pricePerClick = frameData ? parseFloat(frameData.pricePerClick || "0") : 0;
 
-        const statsWithCampaigns = Object.values(aggregatedStats).map((stat: any) => {
-          const campaign = campaignsData?.find((c: any) => c.id === stat.campaign_id);
-          const endDate = campaign?.campaign_details?.endDate;
-          const terminationDate = endDate ? `${endDate.year}-${endDate.month}-${endDate.day}` : null;
-          return {
-            ...stat,
-            campaigns: campaign
-              ? {
-                  name: campaign.name,
-                  termination_date: terminationDate,
-                  creativeImage: campaign.campaign_details?.creativeImage || null,
-                }
-              : null,
-          };
-        });
-        setCampaignStats(statsWithCampaigns);
+            // Calculate campaign status
+            const endDate = campaign?.campaign_details?.endDate;
+            const budget = campaign?.campaign_details?.budget ? parseFloat(campaign.campaign_details.budget) : 0;
+            const totalSpent = (campaign?.clicks || 0) * pricePerClick;
+
+            let isActive = campaign?.is_active || false;
+            if (endDate) {
+              const end = new Date(endDate.year, endDate.month - 1, endDate.day);
+              const today = new Date();
+              const isWithinDateRange = end >= today;
+              const isWithinBudget = totalSpent < budget;
+              isActive = isWithinDateRange && isWithinBudget;
+            }
+
+            return {
+              listing_id: frame.listing_id,
+              frame: frame.frame_id,
+              campaign_id: frame.campaign_id,
+              impression_count: campaign?.impressions || 0,
+              click_count: campaign?.clicks || 0,
+              uploaded_file: frame.uploaded_file,
+              pricePerClick,
+              isActive, // Add the calculated status
+              campaigns: {
+                name: campaign?.name || "Unknown",
+                termination_date: campaign?.campaign_details?.endDate
+                  ? `${campaign.campaign_details.endDate.year}-${campaign.campaign_details.endDate.month}-${campaign.campaign_details.endDate.day}`
+                  : undefined,
+                creativeImage: campaign?.campaign_details?.creativeImage || null,
+                budget: campaign?.campaign_details?.budget,
+              },
+            };
+          }) || [];
+
+        setCampaignStats(stats);
 
         // Calculate totals
-        const impressions = statsWithCampaigns.reduce((sum: number, stat: CampaignStat) => sum + (stat.impression_count || 0), 0);
-        const clicks = statsWithCampaigns.reduce((sum: number, stat: CampaignStat) => sum + (stat.click_count || 0), 0);
+        const impressions = stats.reduce((sum: number, stat: CampaignStat) => sum + (stat.impression_count || 0), 0);
+        const clicks = stats.reduce((sum: number, stat: CampaignStat) => sum + (stat.click_count || 0), 0);
         let earnings = 0;
 
         parsedListings.forEach((listing: Listing) => {
           const frames = listing.selected_frames || {};
-          statsWithCampaigns
+          stats
             .filter((stat: CampaignStat) => stat.listing_id === listing.id)
             .forEach((stat: CampaignStat) => {
               const frameData = frames[stat.frame];
