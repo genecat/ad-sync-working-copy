@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Check if the frame exists and is associated with an active campaign
+    // Check if the frame exists and is associated with a campaign
     const { data: frameData, error: frameError } = await supabase
       .from('frames')
       .select('campaign_id')
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     // Check if the campaign is active
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
-      .select('campaign_details')
+      .select('campaign_details, is_active')
       .eq('id', frameData.campaign_id)
       .single();
 
@@ -62,13 +62,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ isActive: false });
     }
 
+    // Check if the campaign is active based on both is_active and endDate
+    const isCampaignActive = campaign.is_active;
     const endDate = new Date(
       campaign.campaign_details.endDate.year,
       campaign.campaign_details.endDate.month - 1,
       campaign.campaign_details.endDate.day
     );
     const today = new Date();
-    const isActive = endDate >= today;
+    const isNotExpired = endDate >= today;
+
+    const isActive = isCampaignActive && isNotExpired;
 
     return res.status(200).json({ isActive });
   } catch (err) {
