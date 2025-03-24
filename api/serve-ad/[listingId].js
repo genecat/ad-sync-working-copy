@@ -93,7 +93,14 @@ export default async (req, res) => {
     return;
   }
 
-  const imageUrl = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frameRecord.uploaded_file}`;
+  // Determine if the uploaded_file is a full URL or a relative path and construct imageUrl accordingly
+  let imageUrl;
+  if (frameRecord.uploaded_file.startsWith('http')) {
+    imageUrl = frameRecord.uploaded_file;
+  } else {
+    imageUrl = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frameRecord.uploaded_file}`;
+  }
+
   const targetUrl = campaign.campaign_details.targetURL || "https://mashdrop.com";
 
   console.log("Final Image URL:", imageUrl);
@@ -114,11 +121,7 @@ export default async (req, res) => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameRecord.campaign_id}' })
             }).then(response => {
-              if (response.ok) {
-                window.open('${targetUrl}', '_blank');
-              } else {
-                window.open('${targetUrl}', '_blank');
-              }
+              window.open('${targetUrl}', '_blank');
             }).catch(error => {
               window.open('${targetUrl}', '_blank');
             });
@@ -127,7 +130,7 @@ export default async (req, res) => {
       </script>
     </head>
     <body>
-      <img src="${imageUrl}" width="${frameRecord.size.split('x')[0]}" height="${frameRecord.size.split('x')[1]}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for Frame ${frame}" />
+      <img src="${imageUrl}" onerror="console.error('Image failed to load: ${imageUrl}');" style="border: 1px solid red; max-width: 100%; max-height: 100%;" alt="Ad for Frame ${frame}" />
     </body>
     </html>
   `);
