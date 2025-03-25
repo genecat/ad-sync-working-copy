@@ -9,6 +9,7 @@ export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.removeHeader('X-Frame-Options'); // Remove the X-Frame-Options header
 
   if (req.method === 'OPTIONS') {
     console.log('[serve-ad] Handling OPTIONS request');
@@ -117,8 +118,16 @@ export default async (req, res) => {
     <head>
       <title>Ad</title>
       <style>
-        body { margin: 0; padding: 0; }
-        img { border: none !important; outline: none !important; max-width: 100%; max-height: 100%; }
+        html, body { margin: 0; padding: 0; border: none !important; }
+        img { 
+          border: none !important; 
+          outline: none !important; 
+          max-width: 100%; 
+          max-height: 100%; 
+          display: block; 
+          box-shadow: none !important; 
+        }
+        * { border-collapse: collapse; }
       </style>
       <script>
         let isClicking = false;
