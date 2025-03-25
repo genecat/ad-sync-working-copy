@@ -17,6 +17,8 @@ export default async (req, res) => {
 
   const { listingId, frameId } = req.query;
 
+  console.log('[check-ad-status] Request Query:', { listingId, frameId });
+
   if (!listingId || !frameId) {
     console.log('[check-ad-status] Missing listingId or frameId');
     return res.status(400).json({ error: 'Missing listingId or frameId' });
@@ -58,9 +60,19 @@ export default async (req, res) => {
     const budget = parseFloat(campaign.budget) || 0;
     const spent = (campaign.clicks || 0) * 0.24; // Assuming $0.24 per click
 
-    const isActive = endDate >= today && spent < budget;
+    const isNotExpired = endDate >= today;
+    const isWithinBudget = spent < budget;
+    const isActive = isNotExpired && isWithinBudget;
 
-    console.log('[check-ad-status] Ad Status:', { isActive, endDate, today, budget, spent });
+    console.log('[check-ad-status] Ad Status Details:', {
+      isActive,
+      endDate: endDate.toISOString(),
+      today: today.toISOString(),
+      budget,
+      spent,
+      clicks: campaign.clicks,
+      impressions: campaign.impressions
+    });
 
     return res.status(200).json({ isActive });
   } catch (error) {
