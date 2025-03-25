@@ -116,6 +116,10 @@ export default async (req, res) => {
     <html>
     <head>
       <title>Ad</title>
+      <style>
+        body { margin: 0; padding: 0; }
+        img { border: none !important; outline: none !important; max-width: 100%; max-height: 100%; }
+      </style>
       <script>
         let isClicking = false;
         document.addEventListener('click', function(e) {
@@ -144,7 +148,7 @@ export default async (req, res) => {
       </script>
     </head>
     <body>
-      <img src="${imageUrl}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for Frame ${frame}" />
+      <img src="${imageUrl}" alt="Ad for Frame ${frame}" />
     </body>
     </html>
   `);
