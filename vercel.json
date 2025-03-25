@@ -13,10 +13,6 @@
       "destination": "/api/track-click.js"
     },
     {
-      "source": "/api/generate-embed",
-      "destination": "/api/generate-embed.js"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
