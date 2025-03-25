@@ -35,6 +35,17 @@
       "maxDuration": 10
     }
   },
+  "headers": [
+    {
+      "source": "/api/serve-ad/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOW"
+        }
+      ]
+    }
+  ],
   "cleanUrls": true,
   "trailingSlash": false
 }
