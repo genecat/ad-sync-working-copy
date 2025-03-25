@@ -13,6 +13,10 @@
       "destination": "/api/track-click.js"
     },
     {
+      "source": "/api/generate-embed",
+      "destination": "/api/generate-embed.js"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
@@ -31,6 +35,10 @@
       "maxDuration": 10
     },
     "api/track-click.js": {
+      "memory": 128,
+      "maxDuration": 10
+    },
+    "api/generate-embed.js": {
       "memory": 128,
       "maxDuration": 10
     }
