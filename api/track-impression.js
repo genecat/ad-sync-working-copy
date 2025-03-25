@@ -6,30 +6,41 @@ const supabase = createClient(
 );
 
 export default async (req, res) => {
+  // Set CORS headers to allow requests from any origin
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    console.log('[track-impression] Handling OPTIONS request');
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
+    console.log('[track-impression] Invalid method:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { frame, campaignId } = req.body;
 
+  console.log('[track-impression] Request Body:', { frame, campaignId });
+
   if (!frame || !campaignId) {
+    console.log('[track-impression] Missing frame or campaignId');
     return res.status(400).json({ error: 'Missing frame or campaignId' });
   }
 
   try {
-    // Increment the impressions count in the campaigns table
-    const { data: campaign, error: fetchError } = await supabase
+    const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
       .select('impressions')
       .eq('id', campaignId)
       .single();
 
-    if (fetchError) {
-      console.error('Error fetching campaign:', fetchError);
-      return res.status(500).json({ error: 'Error fetching campaign' });
-    }
+    console.log('[track-impression] Campaign Query Result:', { campaign, campaignError });
 
-    if (!campaign) {
+    if (campaignError || !campaign) {
+      console.log('[track-impression] Campaign not found');
       return res.status(404).json({ error: 'Campaign not found' });
     }
 
@@ -40,14 +51,16 @@ export default async (req, res) => {
       .update({ impressions: newImpressions })
       .eq('id', campaignId);
 
+    console.log('[track-impression] Update Result:', { newImpressions, updateError });
+
     if (updateError) {
-      console.error('Error updating impressions:', updateError);
-      return res.status(500).json({ error: 'Error updating impressions' });
+      console.error('[track-impression] Update Error:', updateError);
+      return res.status(500).json({ error: 'Failed to update impressions' });
     }
 
     return res.status(200).json({ success: true, impressions: newImpressions });
   } catch (error) {
-    console.error('Error in track-impression:', error);
+    console.error('[track-impression] Error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
