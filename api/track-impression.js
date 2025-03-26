@@ -16,6 +16,7 @@ export default async (req, res) => {
 
   if (req.method === 'OPTIONS') {
     console.log('[track-impression] Handling OPTIONS request');
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({});
   }
 
