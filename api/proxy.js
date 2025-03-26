@@ -1,18 +1,29 @@
 export default async (req, res) => {
-    // Set CORS headers to allow requests from the specific Wix origin
-    res.setHeader('Access-Control-Allow-Origin', 'https://genecat-wixsite-com.filesusr.com');
+    // Set CORS headers to allow requests from any origin
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
+    res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+    res.setHeader('Vary', 'Origin');
   
-    // Log the incoming request method and headers for debugging
-    console.log('[proxy] Request Method:', req.method);
-    console.log('[proxy] Request Headers:', req.headers);
+    // Log full request details for debugging
+    console.log('[proxy] Full request details:', {
+      method: req.method,
+      headers: req.headers,
+      body: req.body,
+      origin: req.headers.origin
+    });
   
     // Handle OPTIONS preflight request
     if (req.method === 'OPTIONS') {
       console.log('[proxy] Handling OPTIONS request');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      res.setHeader('Vary', 'Origin');
       res.status(200).json({ message: 'Preflight successful' });
       return;
     }
@@ -52,11 +63,25 @@ export default async (req, res) => {
         },
         body: JSON.stringify({ frame, campaignId })
       });
+  
+      // Log full response details
+      console.log('[proxy] Response status:', response.status);
+      console.log('[proxy] Response headers:', Object.fromEntries(response.headers));
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[proxy] Non-OK response:', errorText);
+        return res.status(response.status).json({ error: errorText });
+      }
+  
       const data = await response.json();
       console.log('[proxy] Response from tracking endpoint:', data);
       return res.status(response.status).json(data);
     } catch (error) {
-      console.error('[proxy] Request failed:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      console.error('[proxy] Request failed:', error.message, error.stack);
+      return res.status(500).json({ 
+        error: 'Internal server error', 
+        details: error.message 
+      });
     }
   };
