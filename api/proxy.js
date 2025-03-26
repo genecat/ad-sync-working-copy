@@ -1,15 +1,20 @@
 export default async (req, res) => {
-    // Set CORS headers to allow requests from any origin
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Set CORS headers to allow requests from the specific Wix origin
+    res.setHeader('Access-Control-Allow-Origin', 'https://genecat-wixsite-com.filesusr.com');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
+  
+    // Log the incoming request method and headers for debugging
+    console.log('[proxy] Request Method:', req.method);
+    console.log('[proxy] Request Headers:', req.headers);
   
     // Handle OPTIONS preflight request
     if (req.method === 'OPTIONS') {
       console.log('[proxy] Handling OPTIONS request');
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');
-      return res.status(200).json({ message: 'CORS preflight successful' });
+      res.status(200).json({ message: 'Preflight successful' });
+      return;
     }
   
     // Handle POST requests
@@ -19,6 +24,8 @@ export default async (req, res) => {
     }
   
     const { type, frame, campaignId } = req.body;
+  
+    console.log('[proxy] Request Body:', { type, frame, campaignId });
   
     if (!type || !frame || !campaignId) {
       console.log('[proxy] Missing type, frame, or campaignId');
@@ -36,6 +43,7 @@ export default async (req, res) => {
     }
   
     try {
+      console.log('[proxy] Forwarding request to:', endpoint);
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -45,6 +53,7 @@ export default async (req, res) => {
         body: JSON.stringify({ frame, campaignId })
       });
       const data = await response.json();
+      console.log('[proxy] Response from tracking endpoint:', data);
       return res.status(response.status).json(data);
     } catch (error) {
       console.error('[proxy] Request failed:', error);
