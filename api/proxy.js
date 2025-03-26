@@ -1,61 +1,76 @@
 export default async (req, res) => {
-    // Set CORS headers to allow requests from any origin
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
-    res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-    res.setHeader('Vary', 'Origin');
+    // Comprehensive CORS handling
+    const allowedOrigins = [
+      'https://genecat-wixsite-com.filesusr.com',
+      'https://genecat.wixsite.com',
+      'https://www.genecat.wixsite.com'
+    ];
+    const origin = req.headers.origin;
   
-    // Log full request details for debugging
-    console.log('[proxy] Full request details:', {
-      method: req.method,
-      headers: req.headers,
-      body: req.body,
-      origin: req.headers.origin
-    });
-  
-    // Handle OPTIONS preflight request
-    if (req.method === 'OPTIONS') {
-      console.log('[proxy] Handling OPTIONS request');
+    // Dynamic origin checking
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key');
-      res.setHeader('Cache-Control', 'no-store');
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Access-Control-Max-Age', '86400');
-      res.setHeader('Vary', 'Origin');
-      res.status(200).json({ message: 'Preflight successful' });
-      return;
     }
   
-    // Handle POST requests
+    // Extensive CORS headers
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, Origin, X-Requested-With, Accept');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.setHeader('Vary', 'Origin');
+  
+    // Debugging headers
+    console.log('[proxy] Incoming Origin:', origin);
+    console.log('[proxy] Request Method:', req.method);
+    console.log('[proxy] Request Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('[proxy] Request Body:', JSON.stringify(req.body, null, 2));
+  
+    // Handle OPTIONS preflight request with verbose logging
+    if (req.method === 'OPTIONS') {
+      console.log('[proxy] Handling OPTIONS preflight');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(200).json({ 
+        message: 'Preflight successful', 
+        allowedOrigins: allowedOrigins 
+      });
+    }
+  
+    // Validate POST request
     if (req.method !== 'POST') {
-      console.log('[proxy] Invalid method:', req.method);
+      console.error('[proxy] Unsupported method:', req.method);
       return res.status(405).json({ error: 'Method not allowed' });
     }
   
-    const { type, frame, campaignId } = req.body;
-  
-    console.log('[proxy] Request Body:', { type, frame, campaignId });
-  
+    // Validate request body
+    const { type, frame, campaignId } = req.body || {};
     if (!type || !frame || !campaignId) {
-      console.log('[proxy] Missing type, frame, or campaignId');
-      return res.status(400).json({ error: 'Missing type, frame, or campaignId' });
+      console.error('[proxy] Invalid request body', { type, frame, campaignId });
+      return res.status(400).json({ 
+        error: 'Missing required fields', 
+        details: { type, frame, campaignId } 
+      });
     }
   
+    // Endpoint selection
     let endpoint;
-    if (type === 'impression') {
-      endpoint = 'https://my-ad-agency-mb6lrsvoo-genecats-projects.vercel.app/api/track-impression';
-    } else if (type === 'click') {
-      endpoint = 'https://my-ad-agency-mb6lrsvoo-genecats-projects.vercel.app/api/track-click';
-    } else {
-      console.log('[proxy] Invalid type:', type);
-      return res.status(400).json({ error: 'Invalid type' });
+    switch(type) {
+      case 'impression':
+        endpoint = 'https://my-ad-agency-mb6lrsvoo-genecats-projects.vercel.app/api/track-impression';
+        break;
+      case 'click':
+        endpoint = 'https://my-ad-agency-mb6lrsvoo-genecats-projects.vercel.app/api/track-click';
+        break;
+      default:
+        console.error('[proxy] Invalid tracking type:', type);
+        return res.status(400).json({ error: 'Invalid tracking type' });
     }
   
     try {
       console.log('[proxy] Forwarding request to:', endpoint);
-      const response = await fetch(endpoint, {
+      
+      const fetchResponse = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,22 +80,29 @@ export default async (req, res) => {
       });
   
       // Log full response details
-      console.log('[proxy] Response status:', response.status);
-      console.log('[proxy] Response headers:', Object.fromEntries(response.headers));
+      console.log('[proxy] Response Status:', fetchResponse.status);
+      const responseBody = await fetchResponse.text();
+      console.log('[proxy] Response Body:', responseBody);
   
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[proxy] Non-OK response:', errorText);
-        return res.status(response.status).json({ error: errorText });
+      // Parse response body
+      let parsedBody;
+      try {
+        parsedBody = JSON.parse(responseBody);
+      } catch (parseError) {
+        console.error('[proxy] Failed to parse response body:', parseError);
+        parsedBody = { raw: responseBody };
       }
   
-      const data = await response.json();
-      console.log('[proxy] Response from tracking endpoint:', data);
-      return res.status(response.status).json(data);
+      return res.status(fetchResponse.status).json(parsedBody);
+  
     } catch (error) {
-      console.error('[proxy] Request failed:', error.message, error.stack);
+      console.error('[proxy] Request failed:', {
+        message: error.message,
+        stack: error.stack
+      });
+  
       return res.status(500).json({ 
-        error: 'Internal server error', 
+        error: 'Proxy request failed', 
         details: error.message 
       });
     }
