@@ -16,7 +16,7 @@ export default async (req, res) => {
 
   if (req.method === 'OPTIONS') {
     console.log('[track-impression] Handling OPTIONS request');
-    return res.status(200).end();
+    return res.status(200).json({});
   }
 
   if (req.method !== 'POST') {
