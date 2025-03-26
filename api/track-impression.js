@@ -5,11 +5,9 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
 );
 
-// Define a simple API key for validation (in a real app, store this in environment variables)
-const API_KEY = 'your-secret-api-key-12345'; // Replace with a secure key in production
+const API_KEY = 'your-secret-api-key-12345';
 
 export default async (req, res) => {
-  // Set CORS headers to allow requests from any origin
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
@@ -17,7 +15,8 @@ export default async (req, res) => {
   if (req.method === 'OPTIONS') {
     console.log('[track-impression] Handling OPTIONS request');
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({});
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(200).json({ message: 'CORS preflight successful' });
   }
 
   if (req.method !== 'POST') {
@@ -25,7 +24,6 @@ export default async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Validate API key
   const apiKey = req.headers['x-api-key'];
   if (!apiKey || apiKey !== API_KEY) {
     console.log('[track-impression] Invalid or missing API key');

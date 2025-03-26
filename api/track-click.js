@@ -1,43 +1,75 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient('https://pczzwgluhgrjuxjadyaq.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0');
+const supabase = createClient(
+  'https://pczzwgluhgrjuxjadyaq.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
+);
+
+const API_KEY = 'your-secret-api-key-12345';
 
 export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    console.log('[track-click] Handling OPTIONS request');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(200).json({ message: 'CORS preflight successful' });
   }
 
   if (req.method !== 'POST') {
+    console.log('[track-click] Invalid method:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { listingId, frameId, campaignId } = req.body;
-  if (!listingId || !frameId || !campaignId) {
-    return res.status(400).json({ error: 'Missing listingId, frameId, or campaignId' });
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey || apiKey !== API_KEY) {
+    console.log('[track-click] Invalid or missing API key');
+    return res.status(401).json({ error: 'Unauthorized: Invalid API key' });
   }
 
-  const { data: campaignData, error: campaignError } = await supabase
-    .from('campaigns')
-    .select('clicks')
-    .eq('id', campaignId)
-    .single();
-  if (campaignError || !campaignData) {
-    return res.status(404).json({ error: 'Campaign not found' });
+  const { frame, campaignId } = req.body;
+
+  console.log('[track-click] Request Body:', { frame, campaignId });
+
+  if (!frame || !campaignId) {
+    console.log('[track-click] Missing frame or campaignId');
+    return res.status(400).json({ error: 'Missing frame or campaignId' });
   }
 
-  const currentClicks = campaignData.clicks || 0;
+  try {
+    const { data: campaign, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('clicks')
+      .eq('id', campaignId)
+      .single();
 
-  const { error: updateError } = await supabase
-    .from('campaigns')
-    .update({ clicks: currentClicks + 1 })
-    .eq('id', campaignId);
-  if (updateError) {
-    return res.status(500).json({ error: 'Failed to track click' });
+    console.log('[track-click] Campaign Query Result:', { campaign, campaignError });
+
+    if (campaignError || !campaign) {
+      console.log('[track-click] Campaign not found');
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    const newClicks = (campaign.clicks || 0) + 1;
+
+    const { error: updateError } = await supabase
+      .from('campaigns')
+      .update({ clicks: newClicks })
+      .eq('id', campaignId);
+
+    console.log('[track-click] Update Result:', { newClicks, updateError });
+
+    if (updateError) {
+      console.error('[track-click] Update Error:', updateError);
+      return res.status(500).json({ error: 'Failed to update clicks' });
+    }
+
+    return res.status(200).json({ success: true, clicks: newClicks });
+  } catch (error) {
+    console.error('[track-click] Error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  res.status(200).json({ success: true });
 };
