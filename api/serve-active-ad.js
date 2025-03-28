@@ -89,9 +89,18 @@ export default async (req, res) => {
       return res.status(404).send('');
     }
 
-    const slotIndex = parseInt(slotId, 10) - 1;
-    const frameIndex = slotIndex % activeFrames.length;
-    const frame = activeFrames[frameIndex];
+    // Map slotId to specific frames
+    let frame;
+    if (slotId === '1') {
+      frame = activeFrames.find(f => f.frame_id === 'frame1742779287494'); // Maui-Surfboards
+    } else if (slotId === '2') {
+      frame = activeFrames.find(f => f.frame_id === 'frame1741684967676'); // Ad-Sync
+    }
+
+    if (!frame) {
+      console.log('[serve-active-ad] No matching frame for slotId:', slotId);
+      return res.status(404).send('');
+    }
 
     console.log('[serve-active-ad] Selected frame for slotId:', slotId, 'frameId:', frame.frame_id);
 
@@ -110,14 +119,14 @@ export default async (req, res) => {
         (function() {
           console.log('[Ad Debug] Origin:', window.location.origin);
           console.log('[Ad Debug] Current URL:', window.location.href);
-          fetch('https://my-ad-agency-mujptrjsh-genecats-projects.vercel.app/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
+          fetch('https://my-ad-agency-g86k4o1at-genecats-projects.vercel.app/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
             .then(response => response.json())
             .then(data => console.log('[Ad] Impression tracked for ${frame.frame_id}:', data))
             .catch(err => console.error('[Ad] Impression tracking failed for ${frame.frame_id}:', err));
           const adLink = document.getElementById('ad-link-${frame.frame_id}');
           adLink.addEventListener('click', function(e) {
             e.preventDefault();
-            fetch('https://my-ad-agency-mujptrjsh-genecats-projects.vercel.app/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
+            fetch('https://my-ad-agency-g86k4o1at-genecats-projects.vercel.app/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
               .then(response => response.json())
               .then(data => {
                 console.log('[Ad] Click tracked for ${frame.frame_id}:', data);
