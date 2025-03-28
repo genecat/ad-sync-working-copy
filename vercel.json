@@ -41,6 +41,10 @@
     "api/proxy.js": {
       "memory": 128,
       "maxDuration": 10
+    },
+    "api/record-impression.js": {
+      "memory": 128,
+      "maxDuration": 10
     }
   },
   "headers": [
