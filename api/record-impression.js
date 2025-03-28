@@ -54,8 +54,8 @@ export default async (req, res) => {
       .select();
 
     if (error) {
-      console.error('[record-impression] Supabase insert error:', error);
-      return res.status(500).json({ error: 'Failed to record impression', details: error.message });
+      console.error('[record-impression] Supabase insert error:', JSON.stringify(error, null, 2));
+      return res.status(500).json({ error: 'Failed to record impression', details: error.message || 'Unknown error' });
     }
 
     console.log('[record-impression] Impression inserted successfully:', data);
@@ -63,8 +63,9 @@ export default async (req, res) => {
   } catch (error) {
     console.error('[record-impression] Server error:', {
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
+      fullError: JSON.stringify(error, null, 2)
     });
-    return res.status(500).json({ error: 'Server error', details: error.message });
+    return res.status(500).json({ error: 'Server error', details: error.message || 'Unknown error' });
   }
 };
