@@ -5,9 +5,6 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-// In-memory store to track used frames (temporary, resets on deployment)
-const usedFrames = new Set();
-
 export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -43,10 +40,12 @@ export default async (req, res) => {
       return res.status(404).send('');
     }
 
+    // Reset used frames for this request
+    const usedFrames = new Set();
+
     for (const frame of frames) {
-      // Skip if this frame has already been used in another slot
       if (usedFrames.has(frame.frame_id)) {
-        console.log('[serve-active-ad] Frame already used:', frame.frame_id);
+        console.log('[serve-active-ad] Frame already used in this request:', frame.frame_id);
         continue;
       }
 
@@ -85,7 +84,7 @@ export default async (req, res) => {
       const isActive = endDate >= today && (budget === 0 || spent < budget);
 
       if (isActive) {
-        usedFrames.add(frame.frame_id); // Mark this frame as used
+        usedFrames.add(frame.frame_id);
         const imageUrl = frame.uploaded_file.startsWith('http')
           ? frame.uploaded_file
           : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frame.uploaded_file}`;
@@ -102,14 +101,14 @@ export default async (req, res) => {
             (function() {
               console.log('[Ad Debug] Origin:', window.location.origin);
               console.log('[Ad Debug] Current URL:', window.location.href);
-              fetch('https://my-ad-agency-q1wsatv8c-genecats-projects.vercel.app/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
+              fetch('https://my-ad-agency-lvko2asrd-genecats-projects.vercel.app/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
                 .then(response => response.json())
                 .then(data => console.log('[Ad] Impression tracked for ${frame.frame_id}:', data))
                 .catch(err => console.error('[Ad] Impression tracking failed for ${frame.frame_id}:', err));
               const adLink = document.getElementById('ad-link-${frame.frame_id}');
               adLink.addEventListener('click', function(e) {
                 e.preventDefault();
-                fetch('https://my-ad-agency-q1wsatv8c-genecats-projects.vercel.app/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
+                fetch('https://my-ad-agency-lvko2asrd-genecats-projects.vercel.app/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
                   .then(response => response.json())
                   .then(data => {
                     console.log('[Ad] Click tracked for ${frame.frame_id}:', data);
