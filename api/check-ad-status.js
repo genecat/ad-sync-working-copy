@@ -1,55 +1,49 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  'https://pczzwgluhgrjuxjadyaq.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
 );
 
 export default async (req, res) => {
-  // Set CORS headers explicitly
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PATCH, DELETE, PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
-    console.log('[check-ad-status] Handling OPTIONS request');
-    return res.status(200).end();
+    return res.status(200).json({ message: 'Preflight successful' });
+  }
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { listingId, frameId } = req.query;
 
-  console.log('[check-ad-status] Request Query:', { listingId, frameId });
-
   if (!listingId || !frameId) {
-    console.log('[check-ad-status] Missing listingId or frameId');
-    return res.status(400).json({ error: 'Missing listingId or frameId' });
+    return res.status(400).json({ error: 'Missing required query parameters: listingId and frameId' });
   }
 
   try {
-    const { data: frameData, error: frameError } = await supabase
+    const { data: frame, error: frameError } = await supabase
       .from('frames')
-      .select('campaign_id')
+      .select('campaign_id, price_per_click')
+      .eq('listing_id', listingId)
       .eq('frame_id', frameId)
       .single();
 
-    console.log('[check-ad-status] Frame Query Result:', { frameData, frameError });
-
-    if (frameError || !frameData) {
-      console.log('[check-ad-status] Frame not found');
-      return res.status(404).json({ isActive: false, error: 'Frame not found' });
+    if (frameError || !frame) {
+      return res.status(404).json({ error: 'Frame not found' });
     }
 
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
-      .select('campaign_details, budget, impressions, clicks')
-      .eq('id', frameData.campaign_id)
+      .select('campaign_details')
+      .eq('id', frame.campaign_id)
       .single();
 
-    console.log('[check-ad-status] Campaign Query Result:', { campaign, campaignError });
-
     if (campaignError || !campaign) {
-      console.log('[check-ad-status] Campaign not found');
-      return res.status(404).json({ isActive: false, error: 'Campaign not found' });
+      return res.status(404).json({ error: 'Campaign not found' });
     }
 
     const endDate = new Date(
@@ -58,12 +52,32 @@ export default async (req, res) => {
       campaign.campaign_details.endDate.day
     );
     const today = new Date();
-    const budget = parseFloat(campaign.budget) || 0;
-    const spent = (campaign.clicks || 0) * 0.24; // Assuming $0.24 per click
 
-    const isNotExpired = endDate >= today;
-    const isWithinBudget = spent < budget;
-    const isActive = isNotExpired && isWithinBudget;
+    const { count: clicks, error: clicksError } = await supabase
+      .from('clicks')
+      .select('*', { count: 'exact', head: true })
+      .eq('frame_id', frameId);
+
+    if (clicksError) {
+      console.error('[check-ad-status] Error fetching clicks:', clicksError);
+      return res.status(500).json({ error: 'Error fetching clicks' });
+    }
+
+    const { count: impressions, error: impressionsError } = await supabase
+      .from('impressions')
+      .select('*', { count: 'exact', head: true })
+      .eq('frame_id', frameId);
+
+    if (impressionsError) {
+      console.error('[check-ad-status] Error fetching impressions:', impressionsError);
+      return res.status(500).json({ error: 'Error fetching impressions' });
+    }
+
+    const budget = parseFloat(campaign.campaign_details.budget) || 0;
+    const pricePerClick = parseFloat(frame.price_per_click) || 0;
+    const spent = clicks * pricePerClick;
+
+    const isActive = endDate >= today && (budget === 0 || spent < budget);
 
     console.log('[check-ad-status] Ad Status Details:', {
       isActive,
@@ -71,13 +85,13 @@ export default async (req, res) => {
       today: today.toISOString(),
       budget,
       spent,
-      clicks: campaign.clicks,
-      impressions: campaign.impressions
+      clicks,
+      impressions
     });
 
     return res.status(200).json({ isActive });
   } catch (error) {
-    console.error('[check-ad-status] Error:', error);
-    return res.status(500).json({ isActive: false, error: 'Internal server error' });
+    console.error('[check-ad-status] Server error:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
