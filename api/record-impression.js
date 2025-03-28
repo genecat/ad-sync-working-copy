@@ -5,34 +5,28 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default async (req, res) => {
-  // Allow CORS for all origins
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Log the incoming request
-  console.log('[record-impression] Incoming request:', {
+  console.log('[record-impression] Incoming request (v2):', {
     method: req.method,
     query: req.query,
     headers: req.headers
   });
 
-  // Handle OPTIONS preflight request
   if (req.method === 'OPTIONS') {
     console.log('[record-impression] Handling OPTIONS preflight');
     return res.status(200).json({ message: 'Preflight successful' });
   }
 
-  // Only allow GET requests
   if (req.method !== 'GET') {
     console.log('[record-impression] Method not allowed:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Get query parameters
   const { frame, campaignId } = req.query;
 
-  // Validate query parameters
   if (!frame || !campaignId) {
     console.log('[record-impression] Missing query parameters:', { frame, campaignId });
     return res.status(400).json({ error: 'Missing required query parameters: frame and campaignId' });
@@ -41,7 +35,6 @@ export default async (req, res) => {
   try {
     console.log('[record-impression] Attempting to insert impression:', { frame, campaignId });
 
-    // Insert impression into Supabase
     const { data, error } = await supabase
       .from('impressions')
       .insert([
