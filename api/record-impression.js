@@ -35,10 +35,9 @@ export default async (req, res) => {
   try {
     console.log('[record-impression] Attempting to test Supabase connection');
 
-    // Simple SELECT query to test the connection
     const { data, error } = await supabase
       .from('impressions')
-      .select('count', { count: 'exact' }); // Counts rows in the table
+      .select('count', { count: 'exact' });
 
     if (error) {
       console.error('[record-impression] Supabase select error:', JSON.stringify(error, null, 2));
