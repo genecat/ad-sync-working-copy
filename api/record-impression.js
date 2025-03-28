@@ -33,26 +33,20 @@ export default async (req, res) => {
   }
 
   try {
-    console.log('[record-impression] Attempting to insert impression:', { frame, campaignId });
+    console.log('[record-impression] Attempting to test Supabase connection');
 
+    // Simple SELECT query to test the connection
     const { data, error } = await supabase
       .from('impressions')
-      .insert([
-        {
-          frame_id: frame,
-          campaign_id: campaignId,
-          created_at: new Date().toISOString()
-        }
-      ])
-      .select();
+      .select('count', { count: 'exact' }); // Counts rows in the table
 
     if (error) {
-      console.error('[record-impression] Supabase insert error:', JSON.stringify(error, null, 2));
-      return res.status(500).json({ error: 'Failed to record impression', details: error.message || 'Unknown error' });
+      console.error('[record-impression] Supabase select error:', JSON.stringify(error, null, 2));
+      return res.status(500).json({ error: 'Failed to query Supabase', details: error.message || 'Unknown error' });
     }
 
-    console.log('[record-impression] Impression inserted successfully:', data);
-    return res.status(200).json({ message: 'Impression recorded successfully', data });
+    console.log('[record-impression] Supabase query successful:', data);
+    return res.status(200).json({ message: 'Supabase connection works', rowCount: data[0].count });
   } catch (error) {
     console.error('[record-impression] Server error:', {
       message: error.message,
