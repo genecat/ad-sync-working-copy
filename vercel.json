@@ -37,6 +37,10 @@
     "api/generate-embed.js": {
       "memory": 128,
       "maxDuration": 10
+    },
+    "api/proxy.js": {
+      "memory": 128,
+      "maxDuration": 10
     }
   },
   "headers": [
