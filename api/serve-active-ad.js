@@ -28,7 +28,8 @@ export default async (req, res) => {
     const { data: frames, error: framesError } = await supabase
       .from('frames')
       .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
-      .eq('listing_id', listingId);
+      .eq('listing_id', listingId)
+      .order('frame_id', { ascending: true });
 
     if (framesError) {
       console.error('[serve-active-ad] Error fetching frames:', framesError);
@@ -40,15 +41,8 @@ export default async (req, res) => {
       return res.status(404).send('');
     }
 
-    // Reset used frames for this request
-    const usedFrames = new Set();
-
+    const activeFrames = [];
     for (const frame of frames) {
-      if (usedFrames.has(frame.frame_id)) {
-        console.log('[serve-active-ad] Frame already used in this request:', frame.frame_id);
-        continue;
-      }
-
       const { data: campaign, error: campaignError } = await supabase
         .from('campaigns')
         .select('campaign_details')
@@ -84,49 +78,59 @@ export default async (req, res) => {
       const isActive = endDate >= today && (budget === 0 || spent < budget);
 
       if (isActive) {
-        usedFrames.add(frame.frame_id);
-        const imageUrl = frame.uploaded_file.startsWith('http')
-          ? frame.uploaded_file
-          : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frame.uploaded_file}`;
-        const targetUrl = campaign.campaign_details.targetURL || 'https://mashdrop.com';
-        const [width, height] = frame.size ? frame.size.split('x').map(Number) : [300, 250];
-
-        return res.status(200).setHeader('Content-Type', 'text/html').send(`
-          <div class="ad-slot" id="ad-slot-${frame.frame_id}" style="width: ${width}px; height: ${height}px;">
-            <a href="${targetUrl}" target="_blank" id="ad-link-${frame.frame_id}">
-              <img src="${imageUrl}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for ${frame.frame_id}" id="ad-image-${frame.frame_id}"/>
-            </a>
-          </div>
-          <script>
-            (function() {
-              console.log('[Ad Debug] Origin:', window.location.origin);
-              console.log('[Ad Debug] Current URL:', window.location.href);
-              fetch('https://my-ad-agency-lvko2asrd-genecats-projects.vercel.app/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
-                .then(response => response.json())
-                .then(data => console.log('[Ad] Impression tracked for ${frame.frame_id}:', data))
-                .catch(err => console.error('[Ad] Impression tracking failed for ${frame.frame_id}:', err));
-              const adLink = document.getElementById('ad-link-${frame.frame_id}');
-              adLink.addEventListener('click', function(e) {
-                e.preventDefault();
-                fetch('https://my-ad-agency-lvko2asrd-genecats-projects.vercel.app/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
-                  .then(response => response.json())
-                  .then(data => {
-                    console.log('[Ad] Click tracked for ${frame.frame_id}:', data);
-                    window.open('${targetUrl}', '_blank');
-                  })
-                  .catch(err => {
-                    console.error('[Ad] Click tracking failed for ${frame.frame_id}:', err);
-                    window.open('${targetUrl}', '_blank');
-                  });
-              });
-            })();
-          </script>
-        `);
+        activeFrames.push({ ...frame, targetUrl: campaign.campaign_details.targetURL || 'https://mashdrop.com' });
       }
     }
 
-    console.log('[serve-active-ad] No active frames found for listingId:', listingId);
-    return res.status(404).send('');
+    console.log('[serve-active-ad] Active frames for listingId:', listingId, activeFrames.map(f => f.frame_id));
+
+    if (activeFrames.length === 0) {
+      console.log('[serve-active-ad] No active frames found for listingId:', listingId);
+      return res.status(404).send('');
+    }
+
+    const slotIndex = parseInt(slotId, 10) - 1;
+    const frameIndex = slotIndex % activeFrames.length;
+    const frame = activeFrames[frameIndex];
+
+    console.log('[serve-active-ad] Selected frame for slotId:', slotId, 'frameId:', frame.frame_id);
+
+    const imageUrl = frame.uploaded_file.startsWith('http')
+      ? frame.uploaded_file
+      : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frame.uploaded_file}`;
+    const [width, height] = frame.size ? frame.size.split('x').map(Number) : [300, 250];
+
+    return res.status(200).setHeader('Content-Type', 'text/html').send(`
+      <div class="ad-slot" id="ad-slot-${frame.frame_id}" style="width: ${width}px; height: ${height}px;">
+        <a href="${frame.targetUrl}" target="_blank" id="ad-link-${frame.frame_id}">
+          <img src="${imageUrl}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for ${frame.frame_id}" id="ad-image-${frame.frame_id}"/>
+        </a>
+      </div>
+      <script>
+        (function() {
+          console.log('[Ad Debug] Origin:', window.location.origin);
+          console.log('[Ad Debug] Current URL:', window.location.href);
+          fetch('https://my-ad-agency-mujptrjsh-genecats-projects.vercel.app/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
+            .then(response => response.json())
+            .then(data => console.log('[Ad] Impression tracked for ${frame.frame_id}:', data))
+            .catch(err => console.error('[Ad] Impression tracking failed for ${frame.frame_id}:', err));
+          const adLink = document.getElementById('ad-link-${frame.frame_id}');
+          adLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            fetch('https://my-ad-agency-mujptrjsh-genecats-projects.vercel.app/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
+              .then(response => response.json())
+              .then(data => {
+                console.log('[Ad] Click tracked for ${frame.frame_id}:', data);
+                window.open('${frame.targetUrl}', '_blank');
+              })
+              .catch(err => {
+                console.error('[Ad] Click tracking failed for ${frame.frame_id}:', err);
+                window.open('${frame.targetUrl}', '_blank');
+              });
+          });
+        })();
+      </script>
+    `);
   } catch (error) {
     console.error('[serve-active-ad] Server error:', error);
     return res.status(500).send('');
