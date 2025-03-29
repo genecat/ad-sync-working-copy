@@ -89,7 +89,6 @@ export default async (req, res) => {
       return res.status(404).send('');
     }
 
-    // Map slotId to specific frames
     let frame;
     if (slotId === '1') {
       frame = activeFrames.find(f => f.frame_id === 'frame1742779287494'); // Maui-Surfboards
@@ -106,42 +105,4 @@ export default async (req, res) => {
 
     const imageUrl = frame.uploaded_file.startsWith('http')
       ? frame.uploaded_file
-      : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frame.uploaded_file}`;
-    const [width, height] = frame.size ? frame.size.split('x').map(Number) : [300, 250];
-
-    return res.status(200).setHeader('Content-Type', 'text/html').send(`
-      <div class="ad-slot" id="ad-slot-${frame.frame_id}" style="width: ${width}px; height: ${height}px;">
-        <a href="${frame.targetUrl}" target="_blank" id="ad-link-${frame.frame_id}">
-          <img src="${imageUrl}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for ${frame.frame_id}" id="ad-image-${frame.frame_id}"/>
-        </a>
-      </div>
-      <script>
-        (function() {
-          console.log('[Ad Debug] Origin:', window.location.origin);
-          console.log('[Ad Debug] Current URL:', window.location.href);
-          fetch('https://my-ad-agency-g86k4o1at-genecats-projects.vercel.app/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
-            .then(response => response.json())
-            .then(data => console.log('[Ad] Impression tracked for ${frame.frame_id}:', data))
-            .catch(err => console.error('[Ad] Impression tracking failed for ${frame.frame_id}:', err));
-          const adLink = document.getElementById('ad-link-${frame.frame_id}');
-          adLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            fetch('https://my-ad-agency-g86k4o1at-genecats-projects.vercel.app/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaign_id}')
-              .then(response => response.json())
-              .then(data => {
-                console.log('[Ad] Click tracked for ${frame.frame_id}:', data);
-                window.open('${frame.targetUrl}', '_blank');
-              })
-              .catch(err => {
-                console.error('[Ad] Click tracking failed for ${frame.frame_id}:', err);
-                window.open('${frame.targetUrl}', '_blank');
-              });
-          });
-        })();
-      </script>
-    `);
-  } catch (error) {
-    console.error('[serve-active-ad] Server error:', error);
-    return res.status(500).send('');
-  }
-};
+      : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad
