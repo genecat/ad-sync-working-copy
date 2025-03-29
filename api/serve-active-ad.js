@@ -105,4 +105,18 @@ export default async (req, res) => {
 
     const imageUrl = frame.uploaded_file.startsWith('http')
       ? frame.uploaded_file
-      : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad
+      : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frame.uploaded_file}`;
+    const [width, height] = frame.size ? frame.size.split('x').map(Number) : [300, 250];
+
+    return res.status(200).setHeader('Content-Type', 'text/html').send(`
+      <div class="ad-slot" id="ad-slot-${frame.frame_id}" style="width: ${width}px; height: ${height}px;" data-frame-id="${frame.frame_id}" data-campaign-id="${frame.campaign_id}" data-target-url="${frame.targetUrl}">
+        <a href="${frame.targetUrl}" target="_blank" id="ad-link-${frame.frame_id}">
+          <img src="${imageUrl}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for ${frame.frame_id}" id="ad-image-${frame.frame_id}"/>
+        </a>
+      </div>
+    `);
+  } catch (error) {
+    console.error('[serve-active-ad] Server error:', error);
+    return res.status(500).send('');
+  }
+};
