@@ -45,10 +45,10 @@ export function useAdvertiserDashboardData() {
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState<number>(1); // Current page number
-  const [hasMore, setHasMore] = useState<boolean>(true); // Track if there are more campaigns to load
-  const [totalCampaignCount, setTotalCampaignCount] = useState<number>(0); // Total number of campaigns
-  const campaignsPerPage = 10; // Number of campaigns per page
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [totalCampaignCount, setTotalCampaignCount] = useState<number>(0);
+  const campaignsPerPage = 10;
   const { toast } = useToast();
 
   const fetchData = useCallback(async (pageNum: number, reset: boolean = false) => {
@@ -56,7 +56,6 @@ export function useAdvertiserDashboardData() {
       setIsLoading(true);
       setError(null);
 
-      // Fetch user and advertiser ID
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError) throw new Error(`User fetch error: ${userError.message}`);
       const user = userData?.user;
@@ -71,7 +70,6 @@ export function useAdvertiserDashboardData() {
       const advertiserId = profileData?.id;
       if (!advertiserId) throw new Error("Advertiser ID not found");
 
-      // Fetch total count of campaigns for pagination
       const { count, error: countError } = await supabase
         .from("campaigns")
         .select("id", { count: "exact", head: true })
@@ -79,17 +77,15 @@ export function useAdvertiserDashboardData() {
       if (countError) throw new Error(`Count fetch error: ${countError.message}`);
       setTotalCampaignCount(count || 0);
 
-      // Fetch campaigns with pagination
       const start = (pageNum - 1) * campaignsPerPage;
       const end = start + campaignsPerPage - 1;
       const { data: campaignData, error: campaignError } = await supabase
         .from("campaigns")
-        .select("id, name, impressions, clicks, campaign_details, selected_publishers, created_at, is_active, is_archived")
+        .select("id, name, campaign_details, selected_publishers, created_at, is_active, is_archived")
         .eq("advertiser_id", advertiserId)
         .range(start, end);
       if (campaignError) throw new Error(`Campaign fetch error: ${campaignError.message}`);
 
-      // Check if there are more campaigns to load
       setHasMore(end < (count || 0) - 1);
 
       if (!campaignData || campaignData.length === 0) {
@@ -107,7 +103,32 @@ export function useAdvertiserDashboardData() {
         return;
       }
 
-      // Remove duplicates based on campaign name
+      const campaignIds = campaignData.map((c) => c.id);
+      const { data: framesData, error: framesError } = await supabase
+        .from("frames")
+        .select("frame_id, campaign_id, price_per_click, uploaded_file")
+        .in("campaign_id", campaignIds);
+      if (framesError) throw new Error(`Frames fetch error: ${framesError.message}`);
+
+      const { data: impressionsData, error: impressionsError } = await supabase
+        .from("impressions")
+        .select("frame_id");
+      if (impressionsError) throw new Error(`Impressions fetch error: ${impressionsError.message}`);
+
+      const { data: clicksData, error: clicksError } = await supabase
+        .from("clicks")
+        .select("frame_id");
+      if (clicksError) throw new Error(`Clicks fetch error: ${clicksError.message}`);
+
+      const impressionsByFrame = impressionsData.reduce((acc, imp) => {
+        acc[imp.frame_id] = (acc[imp.frame_id] || 0) + 1;
+        return acc;
+      }, {});
+      const clicksByFrame = clicksData.reduce((acc, clk) => {
+        acc[clk.frame_id] = (acc[clk.frame_id] || 0) + 1;
+        return acc;
+      }, {});
+
       const uniqueCampaigns: Campaign[] = [];
       const seenTitles = new Set();
       campaignData.forEach((campaign: Campaign) => {
@@ -118,58 +139,27 @@ export function useAdvertiserDashboardData() {
         }
       });
 
-      // Fetch uploaded_file from frames table
-      const listingIds = uniqueCampaigns.flatMap(campaign =>
-        (campaign.selected_publishers || []).map(publisher => publisher.id).filter(Boolean)
-      );
-
-      let uploadedFilesMap: { [key: string]: string } = {};
-      if (listingIds.length > 0) {
-        const { data: framesData, error: framesError } = await supabase
-          .from("frames")
-          .select("listing_id, uploaded_file")
-          .in("listing_id", listingIds);
-        if (framesError) throw new Error(`Frames fetch error: ${framesError.message}`);
-
-        uploadedFilesMap = framesData.reduce((acc: { [key: string]: string }, frame: any) => {
-          if (frame.uploaded_file) {
-            acc[frame.listing_id] = frame.uploaded_file;
-          }
-          return acc;
-        }, {});
-      }
-
-      // Calculate stats for the current batch
-      let totalClicks = 0;
-      let totalSpent = 0;
-      let totalBudget = 0;
-      let totalImpressions = 0;
-
       const updatedCampaigns = uniqueCampaigns
-        .filter(campaign => !campaign.is_archived) // Filter out archived campaigns
+        .filter((campaign) => !campaign.is_archived)
         .map((campaign: Campaign) => {
           const details = campaign.campaign_details || {};
           const budget = details.budget ? parseFloat(details.budget) : 0;
-          const clicks = campaign.clicks || 0;
-          const impressions = campaign.impressions || 0;
-          let pricePerClick = 0;
+          const frame = framesData.find((f) => f.campaign_id === campaign.id) || {};
+          const impressions = impressionsByFrame[frame.frame_id] || 0;
+          const clicks = clicksByFrame[frame.frame_id] || 0;
+          let pricePerClick = parseFloat(frame.price_per_click) || 0;
 
-          if (Array.isArray(campaign.selected_publishers) && campaign.selected_publishers.length > 0) {
+          if (!pricePerClick && campaign.selected_publishers?.length) {
             const firstPublisher = campaign.selected_publishers[0];
-            if (Array.isArray(firstPublisher.frames_purchased) && firstPublisher.frames_purchased.length > 0) {
+            if (firstPublisher.frames_purchased?.length) {
               pricePerClick = parseFloat(firstPublisher.frames_purchased[0].pricePerClick) || 0;
-            } else if (firstPublisher.extra_details?.framesChosen && Object.keys(firstPublisher.extra_details.framesChosen).length > 0) {
-              const firstFrame = Object.values(firstPublisher.extra_details.framesChosen)[0];
+            } else if (firstPublisher.extra_details?.framesChosen) {
+              const firstFrame = Object.values(firstPublisher.extra_details.framesChosen)[0] as { pricePerClick: string };
               pricePerClick = parseFloat(firstFrame.pricePerClick) || 0;
             }
           }
 
           const campaignTotalSpent = clicks * pricePerClick;
-          totalClicks += clicks;
-          totalSpent += campaignTotalSpent;
-          totalBudget += budget;
-          totalImpressions += impressions;
-
           const currentDate = new Date();
           const createdAt = new Date(campaign.created_at);
           const endDate = details.endDate
@@ -177,31 +167,33 @@ export function useAdvertiserDashboardData() {
                 `${details.endDate.year}-${String(details.endDate.month).padStart(2, "0")}-${String(details.endDate.day).padStart(2, "0")}`
               )
             : null;
-
           const isWithinDateRange = createdAt <= currentDate && (!endDate || endDate >= currentDate);
           const isWithinBudget = campaignTotalSpent < budget;
           const isActive = campaign.is_active && isWithinDateRange && isWithinBudget;
 
-          // Attach the uploaded_file from the frames table
-          const uploadedFile = campaign.selected_publishers?.[0]?.id
-            ? uploadedFilesMap[campaign.selected_publishers[0].id]
-            : undefined;
-
           return {
             ...campaign,
-            clicks,
             impressions,
-            pricePerClick,
+            clicks,
+            selected_publishers: campaign.selected_publishers || [],
+            uploaded_file: frame.uploaded_file,
             isActive,
-            uploaded_file: uploadedFile,
           };
         });
 
+      const totalClicks = updatedCampaigns.reduce((sum, c) => sum + c.clicks, 0);
+      const totalImpressions = updatedCampaigns.reduce((sum, c) => sum + c.impressions, 0);
+      const totalBudget = updatedCampaigns.reduce((sum, c) => sum + parseFloat(c.campaign_details?.budget || "0"), 0);
+      const totalSpent = updatedCampaigns.reduce((sum, c) => {
+        const frame = framesData.find((f) => f.campaign_id === c.id);
+        const pricePerClick = parseFloat(frame?.price_per_click) || 0;
+        return sum + c.clicks * pricePerClick;
+      }, 0);
       const avgCostPerClick = totalClicks > 0 ? totalSpent / totalClicks : 0;
       const totalRemaining = Math.max(0, totalBudget - totalSpent);
 
       setStats({
-        totalCampaigns: count || 0, // Use the total count from the database
+        totalCampaigns: count || 0,
         totalClicks,
         avgCostPerClick,
         totalBudget,
@@ -209,9 +201,7 @@ export function useAdvertiserDashboardData() {
         totalRemaining,
         totalImpressions,
       });
-
-      // Append or reset campaigns based on the reset flag
-      setCampaigns(prev => (reset ? updatedCampaigns : [...prev, ...updatedCampaigns]));
+      setCampaigns((prev) => (reset ? updatedCampaigns : [...prev, ...updatedCampaigns]));
     } catch (err: any) {
       setError(err.message);
       toast({ title: "Error fetching data", description: err.message });
@@ -220,19 +210,30 @@ export function useAdvertiserDashboardData() {
     }
   }, [toast]);
 
-  // Fetch data when the page changes
   useEffect(() => {
     fetchData(page, page === 1);
+
+    const impressionsChannel = supabase
+      .channel("public:impressions")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "impressions" }, () => fetchData(page, page === 1))
+      .subscribe();
+    const clicksChannel = supabase
+      .channel("public:clicks")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "clicks" }, () => fetchData(page, page === 1))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(impressionsChannel);
+      supabase.removeChannel(clicksChannel);
+    };
   }, [page, fetchData]);
 
-  // Function to load the next page
   const loadMore = () => {
     if (hasMore && !isLoading) {
-      setPage(prev => prev + 1);
+      setPage((prev) => prev + 1);
     }
   };
 
-  // Function to refetch data (e.g., after archiving a campaign)
   const refetch = () => {
     setPage(1);
     fetchData(1, true);
