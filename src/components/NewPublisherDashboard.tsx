@@ -17,18 +17,52 @@ function NewPublisherDashboard({ session }) {
   } = usePublisherDashboardData();
   const { toast } = useToast();
 
+  // Filter live and archived campaigns
+  const liveCampaigns = campaignStats.filter(campaign => campaign.status !== "archived");
+  const archivedCampaigns = campaignStats.filter(campaign => campaign.status === "archived");
+
   // Function to archive a campaign
   const handleArchiveCampaign = async (campaignId: string) => {
     try {
+      console.log("Archiving campaign with ID:", campaignId);
       const { error } = await supabase
         .from("campaigns")
-        .update({ is_archived: true })
+        .update({ status: "archived" })
         .eq("id", campaignId);
-      if (error) throw error;
+      if (error) {
+        console.error("Error archiving campaign:", error);
+        throw error;
+      }
 
-      window.location.reload();
       toast({ title: "Success", description: "Campaign archived successfully." });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (err: any) {
+      console.error("Caught error in handleArchiveCampaign:", err);
+      toast({ title: "Error", description: err.message });
+    }
+  };
+
+  // Function to restore a campaign
+  const handleRestoreCampaign = async (campaignId: string) => {
+    try {
+      console.log("Restoring campaign with ID:", campaignId);
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ status: "approved" })
+        .eq("id", campaignId);
+      if (error) {
+        console.error("Error restoring campaign:", error);
+        throw error;
+      }
+
+      toast({ title: "Success", description: "Campaign restored successfully." });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err: any) {
+      console.error("Caught error in handleRestoreCampaign:", err);
       toast({ title: "Error", description: err.message });
     }
   };
@@ -47,7 +81,6 @@ function NewPublisherDashboard({ session }) {
 
       console.log("Update successful, updated campaign:", data);
       toast({ title: "Success", description: `Campaign ${status}.` });
-      // Reload after showing the toast
       setTimeout(() => {
         window.location.reload();
       }, 1000);
@@ -87,7 +120,7 @@ function NewPublisherDashboard({ session }) {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {[
-          { title: "Total Campaigns", value: campaignStats.length },
+          { title: "Total Campaigns", value: liveCampaigns.length },
           { title: "Total Impressions", value: totalImpressions },
           { title: "Total Clicks", value: totalClicks },
           { title: "Total Earnings", value: `$${totalEarnings.toFixed(2)}` },
@@ -203,9 +236,9 @@ function NewPublisherDashboard({ session }) {
       )}
 
       <h2 className="text-2xl font-bold mb-4 mt-6">Live Campaigns</h2>
-      {console.log("Rendering Live Campaigns:", campaignStats.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
-      {campaignStats.length > 0 ? (
-        campaignStats.map((campaign) => (
+      {console.log("Rendering Live Campaigns:", liveCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
+      {liveCampaigns.length > 0 ? (
+        liveCampaigns.map((campaign) => (
           <div
             key={`${campaign.listing_id}-${campaign.frame}`}
             className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
@@ -268,6 +301,72 @@ function NewPublisherDashboard({ session }) {
         ))
       ) : (
         <p>No active campaigns found.</p>
+      )}
+
+      <h2 className="text-2xl font-bold mb-4 mt-6">Archived Campaigns</h2>
+      {console.log("Rendering Archived Campaigns:", archivedCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
+      {archivedCampaigns.length > 0 ? (
+        archivedCampaigns.map((campaign) => (
+          <div
+            key={`${campaign.listing_id}-${campaign.frame}`}
+            className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">
+                {campaign.campaigns?.name || "Unknown"}
+              </h3>
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-block w-4 h-4 rounded-full bg-gray-500"
+                  title="Archived"
+                ></span>
+                <button
+                  onClick={() => handleRestoreCampaign(campaign.campaign_id)}
+                  className="bg-blue-500 text-white px-4 py-1 rounded-lg hover:bg-blue-600 transition"
+                >
+                  Restore
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium mb-1">
+                  Campaign Title: {campaign.campaigns?.name || "Unknown"}
+                </p>
+                <p className="text-sm">
+                  Frame: {campaign.frame || "Unknown"}
+                </p>
+                <p className="text-sm">
+                  Price Per Click: ${campaign.pricePerClick?.toFixed(2) || "0.00"}
+                </p>
+                <p className="text-sm">
+                  Total Impressions: {campaign.impression_count}
+                </p>
+                <p className="text-sm">
+                  Total Clicks: {campaign.click_count}
+                </p>
+                <p className="text-sm">
+                  Termination Date: {campaign.campaigns?.termination_date || "N/A"}
+                </p>
+              </div>
+              <div className="w-full md:w-24 flex-shrink-0">
+                {campaign.uploaded_file ? (
+                  <img
+                    src={campaign.uploaded_file}
+                    alt="Ad Creative"
+                    className="w-full h-24 object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="w-full h-24 bg-gray-100 flex items-center justify-center rounded-lg">
+                    <p className="text-sm text-gray-500">No Image</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p>No archived campaigns found.</p>
       )}
     </div>
   );

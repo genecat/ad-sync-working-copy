@@ -107,55 +107,53 @@ export function usePublisherDashboardData() {
         return acc;
       }, {});
 
-      const stats: CampaignStat[] = frameData
-        .filter((frame: any) => !frame.campaigns?.is_archived)
-        .map((frame: any) => {
-          const campaign = frame.campaigns;
-          const impressionCount = impressionsByFrame[frame.frame_id] || 0;
-          const clickCount = clicksByFrame[frame.frame_id] || 0;
-          const pricePerClick = parseFloat(frame.price_per_click) || 0;
-          const endDate = campaign?.campaign_details?.endDate;
-          const budget = campaign?.campaign_details?.budget ? parseFloat(campaign.campaign_details.budget) : 0;
-          const totalSpent = clickCount * pricePerClick;
+      const stats: CampaignStat[] = frameData.map((frame: any) => {
+        const campaign = frame.campaigns;
+        const impressionCount = impressionsByFrame[frame.frame_id] || 0;
+        const clickCount = clicksByFrame[frame.frame_id] || 0;
+        const pricePerClick = parseFloat(frame.price_per_click) || 0;
+        const endDate = campaign?.campaign_details?.endDate;
+        const budget = campaign?.campaign_details?.budget ? parseFloat(campaign.campaign_details.budget) : 0;
+        const totalSpent = clickCount * pricePerClick;
 
-          let isActive = campaign?.is_active || false;
-          if (endDate) {
-            const end = new Date(endDate.year, endDate.month - 1, endDate.day);
-            const today = new Date();
-            const isWithinDateRange = end >= today;
-            const isWithinBudget = totalSpent < budget;
-            isActive = isWithinDateRange && isWithinBudget;
-          }
+        let isActive = campaign?.is_active || false;
+        if (endDate) {
+          const end = new Date(endDate.year, endDate.month - 1, endDate.day);
+          const today = new Date();
+          const isWithinDateRange = end >= today;
+          const isWithinBudget = totalSpent < budget;
+          isActive = isWithinDateRange && isWithinBudget;
+        }
 
-          const stat = {
-            listing_id: frame.listing_id,
-            frame: frame.frame_id,
-            campaign_id: frame.campaign_id,
-            impression_count: impressionCount,
-            click_count: clickCount,
-            uploaded_file: frame.uploaded_file,
-            pricePerClick,
-            isActive,
-            status: campaign?.status || "pending",
-            campaigns: {
-              name: campaign?.name || "Unknown",
-              termination_date: endDate
-                ? `${endDate.year}-${endDate.month}-${endDate.day}`
-                : undefined,
-              creativeImage: campaign?.campaign_details?.creativeImage || null,
-              budget: campaign?.campaign_details?.budget,
-            },
-          };
-          console.log(`Campaign ${stat.campaign_id}: status=${stat.status}, isActive=${stat.isActive}`);
-          return stat;
-        });
+        const stat = {
+          listing_id: frame.listing_id,
+          frame: frame.frame_id,
+          campaign_id: frame.campaign_id,
+          impression_count: impressionCount,
+          click_count: clickCount,
+          uploaded_file: frame.uploaded_file,
+          pricePerClick,
+          isActive,
+          status: campaign?.status || "pending",
+          campaigns: {
+            name: campaign?.name || "Unknown",
+            termination_date: endDate
+              ? `${endDate.year}-${endDate.month}-${endDate.day}`
+              : undefined,
+            creativeImage: campaign?.campaign_details?.creativeImage || null,
+            budget: campaign?.campaign_details?.budget,
+          },
+        };
+        console.log(`Campaign ${stat.campaign_id}: status=${stat.status}, isActive=${stat.isActive}`);
+        return stat;
+      });
 
       const approvedCampaigns = stats.filter(stat => stat.status === "approved");
-      console.log("Approved Campaigns:", approvedCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive }))); // Debug log added
+      console.log("Approved Campaigns:", approvedCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive })));
       const pendingCampaigns = stats.filter(stat => stat.status === "pending");
-      console.log("Pending Campaigns:", pendingCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive }))); // Debug log added
+      console.log("Pending Campaigns:", pendingCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive })));
 
-      setCampaignStats(approvedCampaigns);
+      setCampaignStats(stats); // Include all campaigns (approved, pending, and archived)
       setPendingCampaigns(pendingCampaigns);
 
       const totalImps = approvedCampaigns.reduce((sum, stat) => sum + stat.impression_count, 0);
