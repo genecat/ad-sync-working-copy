@@ -27,18 +27,53 @@ export default async (req, res) => {
   try {
     console.log('[serve-active-ad] Fetching frames for listingId:', listingId);
     console.log('[serve-active-ad] Supabase URL:', process.env.SUPABASE_URL);
-    const { data: frames, error: framesError } = await supabase
+
+    // Try the original listingId
+    let { data: frames, error: framesError } = await supabase
       .from('frames')
       .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
       .eq('listing_id', listingId)
       .order('frame_id', { ascending: true });
 
     if (framesError) {
-      console.error('[serve-active-ad] Error fetching frames:', framesError);
+      console.error('[serve-active-ad] Error fetching frames with original listingId:', framesError);
       return res.status(500).json({ error: 'Error fetching frames', details: framesError.message });
     }
 
+    console.log('[serve-active-ad] Frames found with original listingId:', frames ? frames.map(f => f.frame_id) : 'None');
+
+    // If no frames found, try with uppercase listingId
     if (!frames || frames.length === 0) {
+      console.log('[serve-active-ad] Trying uppercase listingId:', listingId.toUpperCase());
+      const { data: upperFrames, error: upperFramesError } = await supabase
+        .from('frames')
+        .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
+        .eq('listing_id', listingId.toUpperCase())
+        .order('frame_id', { ascending: true });
+
+      if (upperFramesError) {
+        console.error('[serve-active-ad] Error fetching frames with uppercase listingId:', upperFramesError);
+        return res.status(500).json({ error: 'Error fetching frames with uppercase listingId', details: upperFramesError.message });
+      }
+
+      frames = upperFrames;
+      console.log('[serve-active-ad] Frames found with uppercase listingId:', frames ? frames.map(f => f.frame_id) : 'None');
+    }
+
+    // If still no frames, fetch all frames to debug
+    if (!frames || frames.length === 0) {
+      console.log('[serve-active-ad] No frames found, fetching all frames for debugging');
+      const { data: allFrames, error: allFramesError } = await supabase
+        .from('frames')
+        .select('frame_id, listing_id')
+        .limit(10);
+
+      if (allFramesError) {
+        console.error('[serve-active-ad] Error fetching all frames:', allFramesError);
+      } else {
+        console.log('[serve-active-ad] All frames in database:', allFrames);
+      }
+
       console.log('[serve-active-ad] No frames found for listingId:', listingId);
       return res.status(404).send('');
     }
