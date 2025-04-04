@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom"; // Added useNavigate
 import { usePublisherDashboardData } from "../hooks/usePublisherDashboardData";
 import { supabase } from "../lib/supabaseClient";
 import { useToast } from "../hooks/use-toast";
@@ -16,12 +16,11 @@ function NewPublisherDashboard({ session }) {
     error,
   } = usePublisherDashboardData();
   const { toast } = useToast();
+  const navigate = useNavigate(); // For manual navigation
 
-  // Filter live and archived campaigns
   const liveCampaigns = campaignStats.filter(campaign => campaign.status !== "archived");
   const archivedCampaigns = campaignStats.filter(campaign => campaign.status === "archived");
 
-  // Function to archive a campaign
   const handleArchiveCampaign = async (campaignId: string) => {
     try {
       console.log("Archiving campaign with ID:", campaignId);
@@ -33,7 +32,6 @@ function NewPublisherDashboard({ session }) {
         console.error("Error archiving campaign:", error);
         throw error;
       }
-
       toast({ title: "Success", description: "Campaign archived successfully." });
       setTimeout(() => {
         window.location.reload();
@@ -44,7 +42,6 @@ function NewPublisherDashboard({ session }) {
     }
   };
 
-  // Function to restore a campaign
   const handleRestoreCampaign = async (campaignId: string) => {
     try {
       console.log("Restoring campaign with ID:", campaignId);
@@ -56,7 +53,6 @@ function NewPublisherDashboard({ session }) {
         console.error("Error restoring campaign:", error);
         throw error;
       }
-
       toast({ title: "Success", description: "Campaign restored successfully." });
       setTimeout(() => {
         window.location.reload();
@@ -67,7 +63,6 @@ function NewPublisherDashboard({ session }) {
     }
   };
 
-  // Function to approve or reject a campaign
   const handleCampaignDecision = async (campaignId: string, status: string) => {
     try {
       console.log(`Attempting to update campaign ${campaignId} with status: ${status}`);
@@ -78,7 +73,6 @@ function NewPublisherDashboard({ session }) {
         .select()
         .single();
       if (error) throw error;
-
       console.log("Update successful, updated campaign:", data);
       toast({ title: "Success", description: `Campaign ${status}.` });
       setTimeout(() => {
@@ -88,6 +82,16 @@ function NewPublisherDashboard({ session }) {
       console.error("Error updating campaign status:", err);
       toast({ title: "Error", description: err.message });
     }
+  };
+
+  const handleModifyListing = (listingId) => {
+    if (!listingId) {
+      console.error("No listing ID provided for redirect");
+      toast({ title: "Error", description: "Invalid listing ID" });
+      return;
+    }
+    console.log("Redirecting to /edit-listing/", listingId);
+    navigate(`/edit-listing/${listingId}`); // Force redirect
   };
 
   if (isLoading) {
@@ -111,13 +115,11 @@ function NewPublisherDashboard({ session }) {
   return (
     <div className="max-w-5xl mx-auto my-10 px-4 bg-modern-bg text-modern-text">
       <h1 className="text-3xl font-bold mb-6">Publisher Dashboard</h1>
-
       {error && (
         <div className="mb-6 text-red-500">
           {error}
         </div>
       )}
-
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {[
           { title: "Total Campaigns", value: liveCampaigns.length },
@@ -131,39 +133,50 @@ function NewPublisherDashboard({ session }) {
           </div>
         ))}
       </div>
-
       <div className="flex justify-end mb-4">
-        <Link to="/create-listing" className="bg-modern-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-modern-primary-dark transition">
+        <Link to="/create-listing-final" className="bg-modern-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-modern-primary-dark transition">
           Create New Listing
         </Link>
       </div>
-
-      <h2 className="text-2xl font-bold mb-4">Websites</h2>
+      <h2 className="text-2xl font-bold mb-4">My Listings</h2>
       {Object.keys(websites).length > 0 ? (
-        Object.entries(websites).map(([website, listings]) => (
+        Object.entries(websites).map(([website, listings], index) => (
           <div key={website} className="mb-4">
             <h3 className="text-xl font-semibold mb-2">{website}</h3>
             <div className="space-y-4">
               {listings.map((listing) => (
                 <div
                   key={listing.id}
-                  className="p-4 bg-modern-card shadow-card rounded-lg flex items-center justify-between"
+                  className="p-4 bg-modern-card shadow-card rounded-lg"
                 >
-                  <div>
-                    <p className="text-sm font-medium">
-                      Listing ID: {listing.id}
-                    </p>
-                    <p className="text-sm">
-                      Frames:{" "}
-                      {Object.keys(listing.selected_frames).join(", ") || "None"}
-                    </p>
+                  <h4 className="text-lg font-semibold mb-2">Listing #{index + 1}</h4>
+                  <p><strong>Title:</strong> {listing.title || "N/A"}</p>
+                  <p><strong>Category:</strong> {listing.category || "N/A"}</p>
+                  <p><strong>Website:</strong> {listing.website}</p>
+                  <p><strong>Listing ID:</strong> {listing.id}</p>
+                  <p>
+                    <strong>Frames:</strong>{" "}
+                    {Object.keys(listing.selected_frames).join(", ") || "None"}
+                  </p>
+                  <div className="mt-2">
+                    <strong>Ad Frames:</strong>{" "}
+                    {Object.entries(listing.selected_frames).map(([key, frame]) => (
+                      <span
+                        key={key}
+                        className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2"
+                      >
+                        {frame.size} - ${frame.pricePerClick || "N/A"} per click
+                      </span>
+                    ))}
                   </div>
-                  <Link
-                    to={`/edit-listing/${listing.id}`}
-                    className="bg-modern-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-modern-primary-dark transition"
-                  >
-                    Edit
-                  </Link>
+                  <div className="mt-4">
+                    <button
+                      onClick={() => handleModifyListing(listing.id)}
+                      className="bg-modern-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-modern-primary-dark transition"
+                    >
+                      Modify Listing
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -172,7 +185,6 @@ function NewPublisherDashboard({ session }) {
       ) : (
         <p>No websites found.</p>
       )}
-
       <h2 className="text-2xl font-bold mb-4 mt-6">Pending Campaigns</h2>
       {console.log("Rendering Pending Campaigns:", pendingCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
       {pendingCampaigns.length > 0 ? (
@@ -234,7 +246,6 @@ function NewPublisherDashboard({ session }) {
       ) : (
         <p>No pending campaigns.</p>
       )}
-
       <h2 className="text-2xl font-bold mb-4 mt-6">Live Campaigns</h2>
       {console.log("Rendering Live Campaigns:", liveCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
       {liveCampaigns.length > 0 ? (
@@ -302,7 +313,6 @@ function NewPublisherDashboard({ session }) {
       ) : (
         <p>No active campaigns found.</p>
       )}
-
       <h2 className="text-2xl font-bold mb-4 mt-6">Archived Campaigns</h2>
       {console.log("Rendering Archived Campaigns:", archivedCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
       {archivedCampaigns.length > 0 ? (
