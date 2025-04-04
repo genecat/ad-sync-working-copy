@@ -7,7 +7,7 @@ import AuthForm from "./AuthForm";
 import SignUp from "./SignUp";
 import CreateListingFinal from "../components/CreateListingFinal";
 import NewPublisherDashboard from "../components/NewPublisherDashboard";
-import EditListing from "../components/EditListing"; // Added this import
+import EditListing from "../components/EditListing";
 import AdvertiserDashboard from "./AdvertiserDashboard";
 import CreateCampaign from "./CreateCampaign";
 import CampaignDashboard from "./CampaignDashboard";
@@ -179,6 +179,8 @@ function App() {
     </nav>
   );
 
+  console.log("App render - Session:", session, "Role:", role, "Path:", window.location.pathname);
+
   return (
     <BrowserRouter>
       {session && <Navigation />}
@@ -201,10 +203,7 @@ function App() {
             )
           }
         />
-        <Route
-          path="/signup"
-          element={<SignUp />}
-        />
+        <Route path="/signup" element={<SignUp />} />
         <Route
           path="/create-listing-final"
           element={
@@ -219,7 +218,7 @@ function App() {
           path="/edit-listing/:id"
           element={
             session && role === "publisher" ? (
-              <EditListing session={session} /> // Changed from ModifyListing to EditListing
+              <EditListing session={session} />
             ) : (
               <AuthForm setSession={setSession} />
             )

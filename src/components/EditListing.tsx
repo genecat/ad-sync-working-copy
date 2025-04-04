@@ -25,8 +25,10 @@ function EditListing({ session }) {
 
   useEffect(() => {
     async function fetchListing() {
+      console.log("Fetching listing for ID:", id, "Session:", session); // Debug log
       if (!session?.user?.id || !id) {
         setIsLoading(false);
+        setSaveMessage("Invalid session or listing ID");
         return;
       }
       const { data, error } = await supabase
@@ -40,6 +42,7 @@ function EditListing({ session }) {
         console.error("Error fetching listing:", error);
         setSaveMessage("Error loading listing.");
       } else if (data) {
+        console.log("Fetched listing data:", data); // Debug log
         setListingDetails({
           title: data.title || "",
           category: data.category || "",
@@ -65,7 +68,7 @@ function EditListing({ session }) {
         return updated;
       }
       const frameInfo = availableFrames.find((f) => f.id === frameId);
-      if (!frameInfo) return prev; // Safety check for undefined frameInfo
+      if (!frameInfo) return prev;
       return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: prev[frameId]?.pricePerClick || "" } };
     });
   };
@@ -82,7 +85,6 @@ function EditListing({ session }) {
       setEmbedCode("Please save the listing first to generate the embed code.");
       return;
     }
-
     const baseUrl = "https://adsync.vendomedia.net/api/serve-active-ad";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
     const frameKeys = Object.keys(selectedFrames);
