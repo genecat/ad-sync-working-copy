@@ -146,7 +146,7 @@ export default async (req, res) => {
       console.log('[serve-active-ad] Frame:', frame.frame_id, 'Is Active:', isActive);
 
       if (isActive) {
-        activeFrames.push({ ...frame, targetUrl: campaign.campaign_details.targetURL || 'https://mashdrop.com' });
+        activeFrames.push({ ...frame, targetUrl: campaign.campaign_details.targetURL || 'https://mashdrop.com', campaignId: frame.campaign_id });
       }
     }
 
@@ -167,17 +167,47 @@ export default async (req, res) => {
 
     console.log('[serve-active-ad] Selected frame for slotId:', slotId, 'frameId:', frame.frame_id);
 
+    // Track impression using the record-impression endpoint
+    const impressionUrl = `https://adsync.vendomedia.net/api/record-impression?frame=${frame.frame_id}&campaignId=${frame.campaignId}`;
+    console.log('[serve-active-ad] Tracking impression via:', impressionUrl);
+
     const imageUrl = frame.uploaded_file.startsWith('http')
       ? frame.uploaded_file
       : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frame.uploaded_file}`;
     const [width, height] = frame.size ? frame.size.split('x').map(Number) : [300, 250];
 
+    // Return HTML with impression and click tracking JavaScript
     return res.status(200).setHeader('Content-Type', 'text/html').send(`
-      <div class="ad-slot" id="ad-slot-${frame.frame_id}" style="width: ${width}px; height: ${height}px;" data-frame-id="${frame.frame_id}" data-campaign-id="${frame.campaign_id}" data-target-url="${frame.targetUrl}">
+      <div class="ad-slot" id="ad-slot-${frame.frame_id}" style="width: ${width}px; height: ${height}px;" data-frame-id="${frame.frame_id}" data-campaign-id="${frame.campaignId}" data-target-url="${frame.targetUrl}">
         <a href="${frame.targetUrl}" target="_blank" id="ad-link-${frame.frame_id}">
           <img src="${imageUrl}" style="border:none; max-width: 100%; max-height: 100%;" alt="Ad for ${frame.frame_id}" id="ad-image-${frame.frame_id}"/>
         </a>
       </div>
+      <script>
+        (function() {
+          // Track impression
+          fetch('${impressionUrl}', {
+            method: 'GET',
+            mode: 'no-cors'
+          }).then(() => console.log('Impression tracked for ${frame.frame_id}'))
+            .catch(err => console.error('Impression tracking failed for ${frame.frame_id}:', err));
+
+          // Track click
+          document.getElementById('ad-link-${frame.frame_id}').addEventListener('click', function(e) {
+            e.preventDefault();
+            fetch('https://adsync.vendomedia.net/api/record-click?frame=${frame.frame_id}&campaignId=${frame.campaignId}', {
+              method: 'GET',
+              mode: 'no-cors'
+            }).then(() => {
+              console.log('Click tracked for ${frame.frame_id}');
+              window.open('${frame.targetUrl}', '_blank');
+            }).catch(err => {
+              console.error('Click tracking failed for ${frame.frame_id}:', err);
+              window.open('${frame.targetUrl}', '_blank');
+            });
+          });
+        })();
+      </script>
     `);
   } catch (error) {
     console.error('[serve-active-ad] Server error:', error);
