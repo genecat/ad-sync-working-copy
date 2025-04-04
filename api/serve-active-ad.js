@@ -26,6 +26,7 @@ export default async (req, res) => {
 
   try {
     console.log('[serve-active-ad] Fetching frames for listingId:', listingId);
+    console.log('[serve-active-ad] Supabase URL:', process.env.SUPABASE_URL);
     const { data: frames, error: framesError } = await supabase
       .from('frames')
       .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
@@ -34,7 +35,7 @@ export default async (req, res) => {
 
     if (framesError) {
       console.error('[serve-active-ad] Error fetching frames:', framesError);
-      return res.status(500).json({ error: 'Error fetching frames' });
+      return res.status(500).json({ error: 'Error fetching frames', details: framesError.message });
     }
 
     if (!frames || frames.length === 0) {
