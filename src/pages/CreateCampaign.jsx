@@ -37,7 +37,7 @@ export default function CreateCampaign({ session }) {
     try {
       const { data: listings, error: listingsError } = await supabase
         .from("listings")
-        .select("*")
+        .select("*, publisher_id")
         .eq("category", selectedCategory);
 
       if (listingsError) throw listingsError;
@@ -202,11 +202,27 @@ export default function CreateCampaign({ session }) {
       }
     }
 
+    // Fetch the publisher's user ID for each selected listing
+    const publishersWithUserIds = await Promise.all(
+      selectedPublishers.map(async (pub) => {
+        const { data: listing, error: listingError } = await supabase
+          .from("listings")
+          .select("publisher_id")
+          .eq("id", pub.id)
+          .single();
+        if (listingError) {
+          console.error("Error fetching publisher_id for listing:", pub.id, listingError);
+          throw new Error(`Failed to fetch publisher_id for listing ${pub.id}`);
+        }
+        return { ...pub, publisher_user_id: listing.publisher_id };
+      })
+    );
+
     const payload = {
       advertiser_id: session.user.id,
       name: campaignDetails.title,
       campaign_details: campaignDetails,
-      selected_publishers: selectedPublishers.map((pub) => {
+      selected_publishers: publishersWithUserIds.map((pub) => {
         const pubId = pub.id;
         const framesChosen = publisherDetails[pubId]?.framesChosen || {};
         const purchasedFrames = Object.entries(framesChosen)
@@ -222,6 +238,7 @@ export default function CreateCampaign({ session }) {
 
         return {
           id: pub.id,
+          publisher_user_id: pub.publisher_user_id, // Add the publisher's user ID
           url: pub.website || "No URL",
           frames_purchased: purchasedFrames,
           extra_details: publisherDetails[pubId] || {},
