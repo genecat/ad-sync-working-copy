@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Log the Supabase client version
+console.log('[serve-active-ad] Supabase client version:', require('@supabase/supabase-js').version);
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
@@ -28,9 +31,22 @@ export default async (req, res) => {
     console.log('[serve-active-ad] Fetching frames for listingId:', listingId);
     console.log('[serve-active-ad] Supabase URL:', process.env.SUPABASE_URL);
 
-    // Try the original listingId
+    // Test a simple query to confirm table access
+    console.log('[serve-active-ad] Testing table access with a simple query');
+    const { data: testFrames, error: testError } = await supabase
+      .from('public.frames')
+      .select('frame_id')
+      .limit(1);
+
+    if (testError) {
+      console.error('[serve-active-ad] Error with test query:', testError);
+      return res.status(500).json({ error: 'Error with test query', details: testError.message });
+    }
+    console.log('[serve-active-ad] Test query result:', testFrames);
+
+    // Try the original listingId with explicit schema
     let { data: frames, error: framesError } = await supabase
-      .from('frames')
+      .from('public.frames')
       .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
       .eq('listing_id', listingId)
       .order('frame_id', { ascending: true });
@@ -46,7 +62,7 @@ export default async (req, res) => {
     if (!frames || frames.length === 0) {
       console.log('[serve-active-ad] Trying uppercase listingId:', listingId.toUpperCase());
       const { data: upperFrames, error: upperFramesError } = await supabase
-        .from('frames')
+        .from('public.frames')
         .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
         .eq('listing_id', listingId.toUpperCase())
         .order('frame_id', { ascending: true });
@@ -64,7 +80,7 @@ export default async (req, res) => {
     if (!frames || frames.length === 0) {
       console.log('[serve-active-ad] No frames found, fetching all frames for debugging');
       const { data: allFrames, error: allFramesError } = await supabase
-        .from('frames')
+        .from('public.frames')
         .select('frame_id, listing_id')
         .limit(10);
 
@@ -84,7 +100,7 @@ export default async (req, res) => {
     for (const frame of frames) {
       console.log('[serve-active-ad] Checking campaign for frame:', frame.frame_id);
       const { data: campaign, error: campaignError } = await supabase
-        .from('campaigns')
+        .from('public.campaigns')
         .select('campaign_details, status')
         .eq('id', frame.campaign_id)
         .single();
@@ -109,7 +125,7 @@ export default async (req, res) => {
       console.log('[serve-active-ad] Frame:', frame.frame_id, 'End Date:', endDate, 'Today:', today, 'Is Future:', endDate >= today);
 
       const { count: clicks, error: clicksError } = await supabase
-        .from('clicks')
+        .from('public.clicks')
         .select('*', { count: 'exact', head: true })
         .eq('frame_id', frame.frame_id);
 
