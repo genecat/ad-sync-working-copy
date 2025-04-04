@@ -54,7 +54,6 @@ export default async (req, res) => {
         continue;
       }
 
-      // Check if campaign is approved
       if (campaign.status !== 'approved') {
         console.log('[serve-active-ad] Campaign not approved for frame:', frame.frame_id);
         continue;
@@ -97,9 +96,9 @@ export default async (req, res) => {
 
     let frame;
     if (slotId === '1') {
-      frame = activeFrames.find(f => f.frame_id === 'frame1742779287494'); // Maui-Surfboards
+      frame = activeFrames[0]; // Pick the first active frame for slotId=1
     } else if (slotId === '2') {
-      frame = activeFrames.find(f => f.frame_id === 'frame1741684967676'); // Ad-Sync
+      frame = activeFrames[1] || activeFrames[0]; // Pick the second frame if available, otherwise the first
     }
 
     if (!frame) {
