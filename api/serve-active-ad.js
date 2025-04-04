@@ -24,6 +24,12 @@ export default async (req, res) => {
     return res.status(400).json({ error: 'Missing required query parameters: listingId and slotId' });
   }
 
+  // Convert slotId to a number (subtract 1 to make it zero-based for array indexing)
+  const slotIndex = parseInt(slotId, 10) - 1;
+  if (isNaN(slotIndex) || slotIndex < 0) {
+    return res.status(400).json({ error: 'Invalid slotId: must be a positive number' });
+  }
+
   try {
     console.log('[serve-active-ad] Fetching frames for listingId:', listingId);
     console.log('[serve-active-ad] Supabase URL:', process.env.SUPABASE_URL);
@@ -151,15 +157,11 @@ export default async (req, res) => {
       return res.status(404).send('');
     }
 
-    let frame;
-    if (slotId === '1') {
-      frame = activeFrames[0]; // Pick the first active frame for slotId=1
-    } else if (slotId === '2') {
-      frame = activeFrames[1]; // Pick the second frame if available, no fallback to the first
-    }
+    // Select the frame based on the slotIndex (slotId - 1)
+    const frame = activeFrames[slotIndex];
 
     if (!frame) {
-      console.log('[serve-active-ad] No matching frame for slotId:', slotId);
+      console.log('[serve-active-ad] No matching frame for slotId:', slotId, 'slotIndex:', slotIndex, 'activeFrames length:', activeFrames.length);
       return res.status(404).send('');
     }
 
