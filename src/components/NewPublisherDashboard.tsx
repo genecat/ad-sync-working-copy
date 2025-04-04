@@ -36,15 +36,23 @@ function NewPublisherDashboard({ session }) {
   // Function to approve or reject a campaign
   const handleCampaignDecision = async (campaignId: string, status: string) => {
     try {
-      const { error } = await supabase
+      console.log(`Attempting to update campaign ${campaignId} with status: ${status}`);
+      const { data, error } = await supabase
         .from("campaigns")
         .update({ status })
-        .eq("id", campaignId);
+        .eq("id", campaignId)
+        .select()
+        .single();
       if (error) throw error;
 
-      window.location.reload();
+      console.log("Update successful, updated campaign:", data);
       toast({ title: "Success", description: `Campaign ${status}.` });
+      // Reload after showing the toast
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (err: any) {
+      console.error("Error updating campaign status:", err);
       toast({ title: "Error", description: err.message });
     }
   };
@@ -203,9 +211,7 @@ function NewPublisherDashboard({ session }) {
             className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg
-
- font-semibold">
+              <h3 className="text-lg font-semibold">
                 {campaign.campaigns?.name || "Unknown"}
               </h3>
               <div className="flex items-center gap-2">
