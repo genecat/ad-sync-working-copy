@@ -25,6 +25,7 @@ export default async (req, res) => {
   }
 
   try {
+    console.log('[serve-active-ad] Fetching frames for listingId:', listingId);
     const { data: frames, error: framesError } = await supabase
       .from('frames')
       .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
@@ -41,8 +42,11 @@ export default async (req, res) => {
       return res.status(404).send('');
     }
 
+    console.log('[serve-active-ad] Frames found:', frames.map(f => f.frame_id));
+
     const activeFrames = [];
     for (const frame of frames) {
+      console.log('[serve-active-ad] Checking campaign for frame:', frame.frame_id);
       const { data: campaign, error: campaignError } = await supabase
         .from('campaigns')
         .select('campaign_details, status')
@@ -50,10 +54,11 @@ export default async (req, res) => {
         .single();
 
       if (campaignError || !campaign) {
-        console.log('[serve-active-ad] Campaign not found for frame:', frame.frame_id);
+        console.log('[serve-active-ad] Campaign not found for frame:', frame.frame_id, 'Error:', campaignError);
         continue;
       }
 
+      console.log('[serve-active-ad] Campaign status for frame', frame.frame_id, ':', campaign.status);
       if (campaign.status !== 'approved') {
         console.log('[serve-active-ad] Campaign not approved for frame:', frame.frame_id);
         continue;
@@ -65,6 +70,7 @@ export default async (req, res) => {
         campaign.campaign_details.endDate.day
       );
       const today = new Date();
+      console.log('[serve-active-ad] Frame:', frame.frame_id, 'End Date:', endDate, 'Today:', today, 'Is Future:', endDate >= today);
 
       const { count: clicks, error: clicksError } = await supabase
         .from('clicks')
@@ -72,15 +78,17 @@ export default async (req, res) => {
         .eq('frame_id', frame.frame_id);
 
       if (clicksError) {
-        console.error('[serve-active-ad] Error fetching clicks:', clicksError);
+        console.error('[serve-active-ad] Error fetching clicks for frame:', frame.frame_id, clicksError);
         continue;
       }
 
       const budget = parseFloat(campaign.campaign_details.budget) || 0;
       const pricePerClick = parseFloat(frame.price_per_click) || 0;
       const spent = clicks * pricePerClick;
+      console.log('[serve-active-ad] Frame:', frame.frame_id, 'Budget:', budget, 'Price per Click:', pricePerClick, 'Clicks:', clicks, 'Spent:', spent);
 
       const isActive = endDate >= today && (budget === 0 || spent < budget);
+      console.log('[serve-active-ad] Frame:', frame.frame_id, 'Is Active:', isActive);
 
       if (isActive) {
         activeFrames.push({ ...frame, targetUrl: campaign.campaign_details.targetURL || 'https://mashdrop.com' });
