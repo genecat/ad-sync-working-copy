@@ -89,37 +89,27 @@ function CreateListingFinal({ session }) {
   };
 
   const generateCode = () => {
-    const baseUrl = "https://my-ad-agency.vercel.app";
+    if (!currentListingId) {
+      setEmbedCode("Please save the listing first to generate the embed code.");
+      return;
+    }
+
+    const baseUrl = "https://adsync.vendomedia.net/api/serve-active-ad";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
-    Object.keys(selectedFrames).forEach((frameKey) => {
+    const frameKeys = Object.keys(selectedFrames);
+
+    frameKeys.forEach((frameKey, index) => {
+      const slotId = index + 1; // Increment slotId starting from 1
       const frameData = selectedFrames[frameKey];
-      const size = frameData.size || "Unknown";
+      const size = frameData.size || "300x250";
       const [width, height] = size.split("x");
-      code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
-      code += `  <iframe src="${baseUrl}/serve-ad?frame=${frameKey}" `;
+
+      code += `<div class="ad-slot" id="ad-slot-${slotId}">\n`;
+      code += `  <iframe src="${baseUrl}?listingId=${currentListingId}&slotId=${slotId}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
       code += `</div>\n`;
-      code += `<script>\n`;
-      code += `  (function() {\n`;
-      code += `    const frameId = "${frameKey}";\n`;
-      code += `    const adSlot = document.getElementById("ad-slot-${frameKey}");\n`;
-      code += `    async function checkAdStatus() {\n`;
-      code += `      try {\n`;
-      code += `        const response = await fetch(\`${baseUrl}/api/check-ad-status?frameId=\${frameId}\`);\n`;
-      code += `        const data = await response.json();\n`;
-      code += `        if (!data.isActive) {\n`;
-      code += `          adSlot.style.display = "none";\n`;
-      code += `        }\n`;
-      code += `      } catch (error) {\n`;
-      code += `        console.error("Error checking ad status:", error);\n`;
-      code += `        adSlot.style.display = "none";\n`;
-      code += `      }\n`;
-      code += `    }\n`;
-      code += `    checkAdStatus();\n`;
-      code += `    setInterval(checkAdStatus, 5 * 60 * 1000);\n`;
-      code += `  })();\n`;
-      code += `</script>\n`;
     });
+
     code += "<!-- Ad Exchange Embed Code End -->\n";
     setEmbedCode(code);
   };
