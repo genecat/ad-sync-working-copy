@@ -17,11 +17,9 @@ function NewPublisherDashboard({ session }) {
   } = usePublisherDashboardData();
   const { toast } = useToast();
 
-  // Filter live and archived campaigns
   const liveCampaigns = campaignStats.filter(campaign => campaign.status !== "archived");
   const archivedCampaigns = campaignStats.filter(campaign => campaign.status === "archived");
 
-  // Function to archive a campaign
   const handleArchiveCampaign = async (campaignId: string) => {
     try {
       console.log("Archiving campaign with ID:", campaignId);
@@ -29,10 +27,7 @@ function NewPublisherDashboard({ session }) {
         .from("campaigns")
         .update({ status: "archived" })
         .eq("id", campaignId);
-      if (error) {
-        console.error("Error archiving campaign:", error);
-        throw error;
-      }
+      if (error) throw error;
 
       toast({ title: "Success", description: "Campaign archived successfully." });
       setTimeout(() => {
@@ -44,7 +39,6 @@ function NewPublisherDashboard({ session }) {
     }
   };
 
-  // Function to restore a campaign
   const handleRestoreCampaign = async (campaignId: string) => {
     try {
       console.log("Restoring campaign with ID:", campaignId);
@@ -52,10 +46,7 @@ function NewPublisherDashboard({ session }) {
         .from("campaigns")
         .update({ status: "approved" })
         .eq("id", campaignId);
-      if (error) {
-        console.error("Error restoring campaign:", error);
-        throw error;
-      }
+      if (error) throw error;
 
       toast({ title: "Success", description: "Campaign restored successfully." });
       setTimeout(() => {
@@ -67,7 +58,6 @@ function NewPublisherDashboard({ session }) {
     }
   };
 
-  // Function to approve or reject a campaign
   const handleCampaignDecision = async (campaignId: string, status: string) => {
     try {
       console.log(`Attempting to update campaign ${campaignId} with status: ${status}`);
@@ -138,32 +128,45 @@ function NewPublisherDashboard({ session }) {
         </Link>
       </div>
 
-      <h2 className="text-2xl font-bold mb-4">Websites</h2>
+      <h2 className="text-2xl font-bold mb-4">My Listings</h2>
       {Object.keys(websites).length > 0 ? (
-        Object.entries(websites).map(([website, listings]) => (
+        Object.entries(websites).map(([website, listings], index) => (
           <div key={website} className="mb-4">
             <h3 className="text-xl font-semibold mb-2">{website}</h3>
             <div className="space-y-4">
               {listings.map((listing) => (
                 <div
                   key={listing.id}
-                  className="p-4 bg-modern-card shadow-card rounded-lg flex items-center justify-between"
+                  className="p-4 bg-modern-card shadow-card rounded-lg"
                 >
-                  <div>
-                    <p className="text-sm font-medium">
-                      Listing ID: {listing.id}
-                    </p>
-                    <p className="text-sm">
-                      Frames:{" "}
-                      {Object.keys(listing.selected_frames).join(", ") || "None"}
-                    </p>
+                  <h4 className="text-lg font-semibold mb-2">Listing #{index + 1}</h4>
+                  <p><strong>Title:</strong> {listing.title || "N/A"}</p>
+                  <p><strong>Category:</strong> {listing.category || "N/A"}</p>
+                  <p><strong>Website:</strong> {listing.website}</p>
+                  <p><strong>Listing ID:</strong> {listing.id}</p>
+                  <p>
+                    <strong>Frames:</strong>{" "}
+                    {Object.keys(listing.selected_frames).join(", ") || "None"}
+                  </p>
+                  <div className="mt-2">
+                    <strong>Ad Frames:</strong>{" "}
+                    {Object.entries(listing.selected_frames).map(([key, frame]) => (
+                      <span
+                        key={key}
+                        className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2"
+                      >
+                        {frame.size} - ${frame.pricePerClick || "N/A"} per click
+                      </span>
+                    ))}
                   </div>
-                  <Link
-                    to={`/edit-listing/${listing.id}`}
-                    className="bg-modern-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-modern-primary-dark transition"
-                  >
-                    Edit
-                  </Link>
+                  <div className="mt-4">
+                    <Link
+                      to={`/edit-listing/${listing.id}`}
+                      className="bg-modern-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-modern-primary-dark transition"
+                    >
+                      Modify Listing
+                    </Link>
+                  </div>
                 </div>
               ))}
             </div>
