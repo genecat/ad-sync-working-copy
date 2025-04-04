@@ -25,7 +25,7 @@ function EditListing({ session }) {
 
   useEffect(() => {
     async function fetchListing() {
-      console.log("Fetching listing for ID:", id, "Session:", session); // Debug log
+      console.log("Fetching listing for ID:", id, "Session:", session);
       if (!session?.user?.id || !id) {
         setIsLoading(false);
         setSaveMessage("Invalid session or listing ID");
@@ -42,7 +42,7 @@ function EditListing({ session }) {
         console.error("Error fetching listing:", error);
         setSaveMessage("Error loading listing.");
       } else if (data) {
-        console.log("Fetched listing data:", data); // Debug log
+        console.log("Fetched listing data:", data);
         setListingDetails({
           title: data.title || "",
           category: data.category || "",
@@ -68,8 +68,7 @@ function EditListing({ session }) {
         return updated;
       }
       const frameInfo = availableFrames.find((f) => f.id === frameId);
-      if (!frameInfo) return prev;
-      return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: prev[frameId]?.pricePerClick || "" } };
+      return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: "" } };
     });
   };
 
@@ -125,11 +124,28 @@ function EditListing({ session }) {
       }
     }
 
+    // Fetch the existing listing to merge frames
+    const { data: existingListing, error: fetchError } = await supabase
+      .from("listings")
+      .select("selected_frames")
+      .eq("id", id)
+      .eq("publisher_id", session.user.id)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching existing listing:", fetchError);
+      setSaveMessage("Error loading existing listing.");
+      return;
+    }
+
+    const existingFrames = existingListing?.selected_frames || {};
+    const updatedFrames = { ...existingFrames, ...selectedFrames };
+
     const payload = {
       title: listingDetails.title,
       category: listingDetails.category,
       website: listingDetails.website,
-      selected_frames: selectedFrames,
+      selected_frames: updatedFrames,
     };
 
     try {
@@ -220,7 +236,7 @@ function EditListing({ session }) {
                       type="number"
                       min="0"
                       step="0.01"
-                      value={selectedFrames[frame.id].pricePerClick}
+                      value={selectedFrames[frame.id]?.pricePerClick || ""}
                       onChange={(e) => handlePriceChange(frame.id, e.target.value)}
                       className="border p-1 w-full bg-gray-100 text-black rounded"
                       placeholder="e.g., 0.50"
