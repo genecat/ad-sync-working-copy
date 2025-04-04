@@ -116,9 +116,9 @@ function AdvertiserDashboard({ session }) {
                   <div className="flex items-center gap-2">
                     <span
                       className={`inline-block w-4 h-4 rounded-full ${
-                        campaign.is_active ? "bg-green-500" : "bg-red-500"
+                        campaign.isActive ? "bg-green-500" : "bg-red-500"
                       }`}
-                      title={campaign.is_active ? "Active" : "Inactive"}
+                      title={campaign.isActive ? "Active" : "Inactive"}
                     ></span>
                     <button
                       onClick={() => handleArchiveCampaign(campaign.id)}

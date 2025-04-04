@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  'https://pczzwgluhgrjuxjadyaq.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
 );
 
 export default async (req, res) => {
@@ -93,7 +93,7 @@ export default async (req, res) => {
   if (frameRecord.uploaded_file.startsWith('http')) {
     imageUrl = frameRecord.uploaded_file;
   } else {
-    imageUrl = `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frameRecord.uploaded_file}`;
+    imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frameRecord.uploaded_file}`;
   }
 
   const targetUrl = campaign.campaign_details.targetURL || "https://mashdrop.com";
@@ -102,7 +102,7 @@ export default async (req, res) => {
   console.log('[serve-ad] Target URL:', targetUrl);
 
   try {
-    const response = await fetch('https://my-ad-agency-3gd2iwokf-genecats-projects.vercel.app/api/track-impression', {
+    const response = await fetch('https://my-ad-agency-9vlbk25px-genecats-projects.vercel.app/api/track-impression', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ frame: frame, campaignId: campaignId || frameRecord.campaign_id })
@@ -136,7 +136,7 @@ export default async (req, res) => {
             isClicking = true;
             e.preventDefault();
             console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency-3gd2iwokf-genecats-projects.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-9vlbk25px-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameRecord.campaign_id}' })

@@ -22,12 +22,14 @@ interface CampaignStat {
   uploaded_file?: string;
   pricePerClick?: number;
   isActive: boolean;
+  status: string;
   campaigns: { name: string; termination_date?: string; creativeImage?: string; budget?: string } | null;
 }
 
 export function usePublisherDashboardData() {
   const [websites, setWebsites] = useState<{ [key: string]: Listing[] }>({});
   const [campaignStats, setCampaignStats] = useState<CampaignStat[]>([]);
+  const [pendingCampaigns, setPendingCampaigns] = useState<CampaignStat[]>([]);
   const [totalImpressions, setTotalImpressions] = useState<number>(0);
   const [totalClicks, setTotalClicks] = useState<number>(0);
   const [totalEarnings, setTotalEarnings] = useState<number>(0);
@@ -82,7 +84,7 @@ export function usePublisherDashboardData() {
 
       const { data: frameData, error: frameError } = await supabase
         .from("frames")
-        .select("listing_id, frame_id, campaign_id, uploaded_file, price_per_click, campaigns (id, name, campaign_details, is_active, is_archived)")
+        .select("listing_id, frame_id, campaign_id, uploaded_file, price_per_click, campaigns (id, name, campaign_details, is_active, is_archived, status)")
         .in("listing_id", listingIds);
       if (frameError) throw new Error(`Frame fetch error: ${frameError.message}`);
 
@@ -125,7 +127,7 @@ export function usePublisherDashboardData() {
             isActive = isWithinDateRange && isWithinBudget;
           }
 
-          return {
+          const stat = {
             listing_id: frame.listing_id,
             frame: frame.frame_id,
             campaign_id: frame.campaign_id,
@@ -134,6 +136,7 @@ export function usePublisherDashboardData() {
             uploaded_file: frame.uploaded_file,
             pricePerClick,
             isActive,
+            status: campaign?.status || "pending",
             campaigns: {
               name: campaign?.name || "Unknown",
               termination_date: endDate
@@ -143,13 +146,21 @@ export function usePublisherDashboardData() {
               budget: campaign?.campaign_details?.budget,
             },
           };
+          console.log(`Campaign ${stat.campaign_id}: status=${stat.status}, isActive=${stat.isActive}`);
+          return stat;
         });
 
-      setCampaignStats(stats);
+      const approvedCampaigns = stats.filter(stat => stat.status === "approved");
+      console.log("Approved Campaigns:", approvedCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive }))); // Debug log added
+      const pendingCampaigns = stats.filter(stat => stat.status === "pending");
+      console.log("Pending Campaigns:", pendingCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive }))); // Debug log added
 
-      const totalImps = stats.reduce((sum, stat) => sum + stat.impression_count, 0);
-      const totalClks = stats.reduce((sum, stat) => sum + stat.click_count, 0);
-      const totalEarn = stats.reduce((sum, stat) => sum + (stat.click_count * (stat.pricePerClick || 0) * 0.7), 0);
+      setCampaignStats(approvedCampaigns);
+      setPendingCampaigns(pendingCampaigns);
+
+      const totalImps = approvedCampaigns.reduce((sum, stat) => sum + stat.impression_count, 0);
+      const totalClks = approvedCampaigns.reduce((sum, stat) => sum + stat.click_count, 0);
+      const totalEarn = approvedCampaigns.reduce((sum, stat) => sum + (stat.click_count * (stat.pricePerClick || 0) * 0.7), 0);
 
       setTotalImpressions(totalImps);
       setTotalClicks(totalClks);
@@ -180,5 +191,5 @@ export function usePublisherDashboardData() {
     };
   }, [toast]);
 
-  return { websites, campaignStats, totalImpressions, totalClicks, totalEarnings, isLoading, error };
+  return { websites, campaignStats, pendingCampaigns, totalImpressions, totalClicks, totalEarnings, isLoading, error };
 }

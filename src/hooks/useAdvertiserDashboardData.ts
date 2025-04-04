@@ -103,35 +103,106 @@ export function useAdvertiserDashboardData() {
         return;
       }
 
+      // Fetch frames and clicks to calculate budget usage
       const campaignIds = campaignData.map((c) => c.id);
       const { data: framesData, error: framesError } = await supabase
         .from("frames")
-        .select("frame_id, campaign_id, price_per_click, uploaded_file")
+        .select("frame_id, campaign_id, price_per_click")
         .in("campaign_id", campaignIds);
       if (framesError) throw new Error(`Frames fetch error: ${framesError.message}`);
-
-      const { data: impressionsData, error: impressionsError } = await supabase
-        .from("impressions")
-        .select("frame_id");
-      if (impressionsError) throw new Error(`Impressions fetch error: ${impressionsError.message}`);
 
       const { data: clicksData, error: clicksError } = await supabase
         .from("clicks")
         .select("frame_id");
       if (clicksError) throw new Error(`Clicks fetch error: ${clicksError.message}`);
 
+      const clicksByFrame = clicksData.reduce((acc, clk) => {
+        acc[clk.frame_id] = (acc[clk.frame_id] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Update is_active in Supabase based on endDate and budget
+      const currentDate = new Date();
+      currentDate.setHours(0, 0, 0, 0); // Reset time to midnight for comparison
+
+      await Promise.all(
+        campaignData.map(async (campaign: Campaign) => {
+          const details = campaign.campaign_details || {};
+          const budget = details.budget ? parseFloat(details.budget) : 0;
+
+          // Calculate total spent for this campaign
+          const frame = framesData.find((f) => f.campaign_id === campaign.id) || {};
+          const clicks = clicksByFrame[frame.frame_id] || 0;
+          const pricePerClick = parseFloat(frame.price_per_click) || 0;
+          const campaignTotalSpent = clicks * pricePerClick;
+
+          const endDate = details.endDate
+            ? new Date(
+                `${details.endDate.year}-${String(details.endDate.month).padStart(2, "0")}-${String(details.endDate.day).padStart(2, "0")}`
+              )
+            : null;
+
+          // Calculate if the campaign should be active based on endDate and budget
+          const isWithinDateRange = !endDate || endDate > currentDate; // Active if no endDate or endDate is in the future
+          const isWithinBudget = campaignTotalSpent < budget;
+          const shouldBeActive = isWithinDateRange && isWithinBudget;
+
+          // Log the campaign ID and calculated shouldBeActive value
+          console.log(`Campaign ${campaign.id}: shouldBeActive = ${shouldBeActive}`);
+
+          // Update is_active in Supabase if it doesn't match the calculated status
+          if (campaign.is_active !== shouldBeActive) {
+            const { error: updateError } = await supabase
+              .from("campaigns")
+              .update({ is_active: shouldBeActive })
+              .eq("id", campaign.id);
+
+            if (updateError) {
+              console.error(`Error updating is_active for campaign ${campaign.id}:`, updateError);
+              console.error("Update error details:", updateError.message, updateError.details, updateError.hint);
+              toast({ title: "Error updating campaign status", description: updateError.message });
+            }
+          }
+        })
+      );
+
+      // Refetch campaign data to ensure we have the latest is_active values
+      const { data: updatedCampaignData, error: updatedCampaignError } = await supabase
+        .from("campaigns")
+        .select("id, name, campaign_details, selected_publishers, created_at, is_active, is_archived")
+        .eq("advertiser_id", advertiserId)
+        .range(start, end);
+      if (updatedCampaignError) throw new Error(`Updated campaign fetch error: ${updatedCampaignError.message}`);
+
+      const updatedCampaignIds = updatedCampaignData.map((c) => c.id);
+      const { data: updatedFramesData, error: updatedFramesError } = await supabase
+        .from("frames")
+        .select("frame_id, campaign_id, price_per_click, uploaded_file")
+        .in("campaign_id", updatedCampaignIds);
+      if (updatedFramesError) throw new Error(`Frames fetch error: ${updatedFramesError.message}`);
+
+      const { data: impressionsData, error: impressionsError } = await supabase
+        .from("impressions")
+        .select("frame_id");
+      if (impressionsError) throw new Error(`Impressions fetch error: ${impressionsError.message}`);
+
+      const { data: updatedClicksData, error: updatedClicksError } = await supabase
+        .from("clicks")
+        .select("frame_id");
+      if (updatedClicksError) throw new Error(`Clicks fetch error: ${updatedClicksError.message}`);
+
       const impressionsByFrame = impressionsData.reduce((acc, imp) => {
         acc[imp.frame_id] = (acc[imp.frame_id] || 0) + 1;
         return acc;
       }, {});
-      const clicksByFrame = clicksData.reduce((acc, clk) => {
+      const updatedClicksByFrame = updatedClicksData.reduce((acc, clk) => {
         acc[clk.frame_id] = (acc[clk.frame_id] || 0) + 1;
         return acc;
       }, {});
 
       const uniqueCampaigns: Campaign[] = [];
       const seenTitles = new Set();
-      campaignData.forEach((campaign: Campaign) => {
+      updatedCampaignData.forEach((campaign: Campaign) => {
         const title = campaign.name || campaign.id;
         if (!seenTitles.has(title)) {
           seenTitles.add(title);
@@ -144,9 +215,9 @@ export function useAdvertiserDashboardData() {
         .map((campaign: Campaign) => {
           const details = campaign.campaign_details || {};
           const budget = details.budget ? parseFloat(details.budget) : 0;
-          const frame = framesData.find((f) => f.campaign_id === campaign.id) || {};
+          const frame = updatedFramesData.find((f) => f.campaign_id === campaign.id) || {};
           const impressions = impressionsByFrame[frame.frame_id] || 0;
-          const clicks = clicksByFrame[frame.frame_id] || 0;
+          const clicks = updatedClicksByFrame[frame.frame_id] || 0;
           let pricePerClick = parseFloat(frame.price_per_click) || 0;
 
           if (!pricePerClick && campaign.selected_publishers?.length) {
@@ -161,13 +232,15 @@ export function useAdvertiserDashboardData() {
 
           const campaignTotalSpent = clicks * pricePerClick;
           const currentDate = new Date();
+          currentDate.setHours(0, 0, 0, 0); // Reset time to midnight
           const createdAt = new Date(campaign.created_at);
           const endDate = details.endDate
             ? new Date(
                 `${details.endDate.year}-${String(details.endDate.month).padStart(2, "0")}-${String(details.endDate.day).padStart(2, "0")}`
               )
             : null;
-          const isWithinDateRange = createdAt <= currentDate && (!endDate || endDate >= currentDate);
+          endDate?.setHours(0, 0, 0, 0); // Reset time to midnight
+          const isWithinDateRange = createdAt <= currentDate && (!endDate || endDate > currentDate);
           const isWithinBudget = campaignTotalSpent < budget;
           const isActive = campaign.is_active && isWithinDateRange && isWithinBudget;
 
@@ -185,7 +258,7 @@ export function useAdvertiserDashboardData() {
       const totalImpressions = updatedCampaigns.reduce((sum, c) => sum + c.impressions, 0);
       const totalBudget = updatedCampaigns.reduce((sum, c) => sum + parseFloat(c.campaign_details?.budget || "0"), 0);
       const totalSpent = updatedCampaigns.reduce((sum, c) => {
-        const frame = framesData.find((f) => f.campaign_id === c.id);
+        const frame = updatedFramesData.find((f) => f.campaign_id === c.id);
         const pricePerClick = parseFloat(frame?.price_per_click) || 0;
         return sum + c.clicks * pricePerClick;
       }, 0);

@@ -45,12 +45,18 @@ export default async (req, res) => {
     for (const frame of frames) {
       const { data: campaign, error: campaignError } = await supabase
         .from('campaigns')
-        .select('campaign_details')
+        .select('campaign_details, status')
         .eq('id', frame.campaign_id)
         .single();
 
       if (campaignError || !campaign) {
         console.log('[serve-active-ad] Campaign not found for frame:', frame.frame_id);
+        continue;
+      }
+
+      // Check if campaign is approved
+      if (campaign.status !== 'approved') {
+        console.log('[serve-active-ad] Campaign not approved for frame:', frame.frame_id);
         continue;
       }
 

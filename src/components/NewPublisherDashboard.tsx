@@ -8,6 +8,7 @@ function NewPublisherDashboard({ session }) {
   const {
     websites,
     campaignStats,
+    pendingCampaigns,
     totalImpressions,
     totalClicks,
     totalEarnings,
@@ -25,9 +26,24 @@ function NewPublisherDashboard({ session }) {
         .eq("id", campaignId);
       if (error) throw error;
 
-      // Refresh the campaign list by refetching data
-      window.location.reload(); // Simple way to refresh; we can optimize later with state management
+      window.location.reload();
       toast({ title: "Success", description: "Campaign archived successfully." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message });
+    }
+  };
+
+  // Function to approve or reject a campaign
+  const handleCampaignDecision = async (campaignId: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ status })
+        .eq("id", campaignId);
+      if (error) throw error;
+
+      window.location.reload();
+      toast({ title: "Success", description: `Campaign ${status}.` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message });
     }
@@ -116,7 +132,70 @@ function NewPublisherDashboard({ session }) {
         <p>No websites found.</p>
       )}
 
+      <h2 className="text-2xl font-bold mb-4 mt-6">Pending Campaigns</h2>
+      {console.log("Rendering Pending Campaigns:", pendingCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
+      {pendingCampaigns.length > 0 ? (
+        pendingCampaigns.map((campaign) => (
+          <div
+            key={campaign.campaign_id}
+            className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">
+                {campaign.campaigns?.name || "Unknown"}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleCampaignDecision(campaign.campaign_id, "approved")}
+                  className="bg-green-500 text-white px-4 py-1 rounded-lg hover:bg-green-600 transition"
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => handleCampaignDecision(campaign.campaign_id, "rejected")}
+                  className="bg-red-500 text-white px-4 py-1 rounded-lg hover:bg-red-600 transition"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium mb-1">
+                  Campaign Title: {campaign.campaigns?.name || "Unknown"}
+                </p>
+                <p className="text-sm">
+                  Frame: {campaign.frame || "Unknown"}
+                </p>
+                <p className="text-sm">
+                  Price Per Click: ${campaign.pricePerClick?.toFixed(2) || "0.00"}
+                </p>
+                <p className="text-sm">
+                  Termination Date: {campaign.campaigns?.termination_date || "N/A"}
+                </p>
+              </div>
+              <div className="w-full md:w-24 flex-shrink-0">
+                {campaign.uploaded_file ? (
+                  <img
+                    src={campaign.uploaded_file}
+                    alt="Ad Creative"
+                    className="w-full h-24 object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="w-full h-24 bg-gray-100 flex items-center justify-center rounded-lg">
+                    <p className="text-sm text-gray-500">No Image</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p>No pending campaigns.</p>
+      )}
+
       <h2 className="text-2xl font-bold mb-4 mt-6">Live Campaigns</h2>
+      {console.log("Rendering Live Campaigns:", campaignStats.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
       {campaignStats.length > 0 ? (
         campaignStats.map((campaign) => (
           <div
@@ -124,7 +203,9 @@ function NewPublisherDashboard({ session }) {
             className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">
+              <h3 className="text-lg
+
+ font-semibold">
                 {campaign.campaigns?.name || "Unknown"}
               </h3>
               <div className="flex items-center gap-2">
@@ -143,7 +224,6 @@ function NewPublisherDashboard({ session }) {
               </div>
             </div>
             <div className="flex flex-col md:flex-row gap-4">
-              {/* Stats Card */}
               <div className="flex-1">
                 <p className="text-sm font-medium mb-1">
                   Campaign Title: {campaign.campaigns?.name || "Unknown"}
@@ -164,7 +244,6 @@ function NewPublisherDashboard({ session }) {
                   Termination Date: {campaign.campaigns?.termination_date || "N/A"}
                 </p>
               </div>
-              {/* Ad Creative Card */}
               <div className="w-full md:w-24 flex-shrink-0">
                 {campaign.uploaded_file ? (
                   <img

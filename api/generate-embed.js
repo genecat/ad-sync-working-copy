@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  'https://pczzwgluhgrjuxjadyaq.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
 );
 
 export default async (req, res) => {
@@ -49,7 +49,7 @@ export default async (req, res) => {
 
     const imageUrl = frameData.uploaded_file.startsWith('http')
       ? frameData.uploaded_file
-      : `https://pczzwgluhgrjuxjadyaq.supabase.co/storage/v1/object/public/ad-creatives/${frameData.uploaded_file}`;
+      : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frameData.uploaded_file}`;
     const targetUrl = campaign.campaign_details.targetURL || 'https://mashdrop.com';
     const [width, height] = frameData.size ? frameData.size.split('x').map(Number) : [300, 250];
 
@@ -69,7 +69,7 @@ export default async (req, res) => {
       <script>
         (function() {
           // Impression tracking
-          fetch('https://my-ad-agency-3gd2iwokf-genecats-projects.vercel.app/api/track-impression', {
+          fetch('https://my-ad-agency-9vlbk25px-genecats-projects.vercel.app/api/track-impression', {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
@@ -80,7 +80,7 @@ export default async (req, res) => {
           // Click tracking
           document.getElementById('ad-link-${frameData.frame_id}').addEventListener('click', function(e) {
             e.preventDefault();
-            fetch('https://my-ad-agency-3gd2iwokf-genecats-projects.vercel.app/api/track-click', {
+            fetch('https://my-ad-agency-9vlbk25px-genecats-projects.vercel.app/api/track-click', {
               method: 'POST',
               mode: 'no-cors',
               headers: { 'Content-Type': 'application/json' },
