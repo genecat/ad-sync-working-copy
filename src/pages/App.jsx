@@ -7,11 +7,11 @@ import AuthForm from "./AuthForm";
 import SignUp from "./SignUp";
 import CreateListingFinal from "../components/CreateListingFinal";
 import NewPublisherDashboard from "../components/NewPublisherDashboard";
+import EditListing from "../components/EditListing"; // Added this import
 import AdvertiserDashboard from "./AdvertiserDashboard";
 import CreateCampaign from "./CreateCampaign";
 import CampaignDashboard from "./CampaignDashboard";
 import DashboardLayout from "./DashboardLayout";
-import ModifyListing from "./ModifyListing";
 import ArchivePage from "./ArchivePage.jsx";
 import Messages from "./Messages";
 
@@ -22,7 +22,6 @@ function App() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Fetch the initial session
     const fetchSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -51,7 +50,6 @@ function App() {
 
     fetchSession();
 
-    // Set up auth state change listener
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       console.log("Auth state changed:", event, "Session:", session);
       if (session) {
@@ -89,7 +87,7 @@ function App() {
           if (data.role === "publisher") {
             await fetchListingId(userId);
           }
-          return; // Success, exit the retry loop
+          return;
         }
       } catch (err) {
         console.error(`Attempt ${attempt} - Failed to fetch user role:`, err);
@@ -99,7 +97,7 @@ function App() {
           setError("Failed to fetch user role after multiple attempts. Please try logging in again.");
           return;
         }
-        await new Promise(resolve => setTimeout(resolve, delay)); // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   };
@@ -221,7 +219,7 @@ function App() {
           path="/edit-listing/:id"
           element={
             session && role === "publisher" ? (
-              <ModifyListing session={session} />
+              <EditListing session={session} /> // Changed from ModifyListing to EditListing
             ) : (
               <AuthForm setSession={setSession} />
             )
