@@ -155,7 +155,7 @@ export default async (req, res) => {
     if (slotId === '1') {
       frame = activeFrames[0]; // Pick the first active frame for slotId=1
     } else if (slotId === '2') {
-      frame = activeFrames[1] || activeFrames[0]; // Pick the second frame if available, otherwise the first
+      frame = activeFrames[1]; // Pick the second frame if available, no fallback to the first
     }
 
     if (!frame) {
