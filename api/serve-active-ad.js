@@ -1,8 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Log the Supabase client version
-console.log('[serve-active-ad] Supabase client version:', require('@supabase/supabase-js').version);
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
