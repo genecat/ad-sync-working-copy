@@ -7,7 +7,7 @@ import AuthForm from "./AuthForm";
 import SignUp from "./SignUp";
 import CreateListingFinal from "../components/CreateListingFinal";
 import NewPublisherDashboard from "../components/NewPublisherDashboard";
-import EditListing from "./pages/ModifyListing"; // ✅ Updated import here
+import EditListing from "../ModifyListing"; // ✅ Corrected import path
 import AdvertiserDashboard from "./AdvertiserDashboard";
 import CreateCampaign from "./CreateCampaign";
 import CampaignDashboard from "./CampaignDashboard";
@@ -178,8 +178,6 @@ function App() {
       </div>
     </nav>
   );
-
-  console.log("App render - Session:", session, "Role:", role, "Path:", window.location.pathname);
 
   return (
     <BrowserRouter basename="/">
