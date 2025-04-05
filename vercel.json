@@ -1,23 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/api/serve-ad/:listingId",
-      "destination": "/api/serve-ad/[listingId].js"
-    },
-    {
-      "source": "/api/serve-campaign/:campaignId",
-      "destination": "/api/serve-campaign/[campaignId].js"
-    },
-    {
-      "source": "/api/track-click",
-      "destination": "/api/track-click.js"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/((?!api).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
