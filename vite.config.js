@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  base: '/', // Ensure the base path is set to root for Vercel deployment
   server: {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
@@ -55,4 +56,9 @@ export default defineConfig({
       });
     },
   },
+  build: {
+    outDir: 'dist', // Confirm output directory is 'dist'
+    assetsDir: 'assets', // Default assets directory
+    sourcemap: true // Optional: enable sourcemaps for debugging
+  }
 });
