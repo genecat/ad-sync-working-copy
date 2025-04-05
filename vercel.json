@@ -1,24 +1,24 @@
 {
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/serve-ad/(.*)",
-      "dest": "/api/serve-ad/$1.js"
+      "source": "/api/serve-ad/:listingId",
+      "destination": "/api/serve-ad/[listingId].js"
     },
     {
-      "src": "/api/serve-campaign/(.*)",
-      "dest": "/api/serve-campaign/$1.js"
+      "source": "/api/serve-campaign/:campaignId",
+      "destination": "/api/serve-campaign/[campaignId].js"
     },
     {
-      "src": "/api/track-click",
-      "dest": "/api/track-click.js"
+      "source": "/api/track-click",
+      "destination": "/api/track-click.js"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "functions": {
