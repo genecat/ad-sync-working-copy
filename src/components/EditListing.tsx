@@ -1,8 +1,44 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, ChangeEvent } from "react";
+import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-const availableFrames = [
+// Define types for the data structures
+interface Frame {
+  id: string;
+  size: string;
+}
+
+interface FrameData {
+  size: string;
+  pricePerClick: string;
+}
+
+interface Listing {
+  id: string;
+  title: string;
+  category: string;
+  website: string;
+  publisher_id: string;
+  selected_frames: { [key: string]: FrameData };
+}
+
+interface Session {
+  user: {
+    id: string;
+  };
+}
+
+interface ListingDetails {
+  title: string;
+  category: string;
+  website: string;
+}
+
+interface EditListingProps {
+  session: Session | null;
+}
+
+const availableFrames: Frame[] = [
   { id: "frame1", size: "300x250" },
   { id: "frame2", size: "728x90" },
   { id: "frame3", size: "640x480" },
@@ -10,57 +46,71 @@ const availableFrames = [
   { id: "frame5", size: "480x640" },
 ];
 
-function EditListing({ session }) {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [listingDetails, setListingDetails] = useState({
+function EditListing({ session }: EditListingProps) {
+  const { id } = useParams<{ id: string }>();
+  const [listingDetails, setListingDetails] = useState<ListingDetails>({
     title: "",
     category: "",
     website: "",
   });
-  const [selectedFrames, setSelectedFrames] = useState({});
-  const [embedCode, setEmbedCode] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedFrames, setSelectedFrames] = useState<{ [key: string]: FrameData }>({});
+  const [embedCode, setEmbedCode] = useState<string>("");
+  const [saveMessage, setSaveMessage] = useState<string>("");
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [currentListingId, setCurrentListingId] = useState<string | null>(id || null);
 
   useEffect(() => {
-    async function fetchListing() {
-      console.log("Fetching listing for ID:", id, "Session:", session);
-      if (!session?.user?.id || !id) {
+    async function fetchListings() {
+      if (!session?.user?.id) {
         setIsLoading(false);
-        setSaveMessage("Invalid session or listing ID");
         return;
       }
+      console.log("Fetching listings for user:", session.user.id);
       const { data, error } = await supabase
         .from("listings")
         .select("*")
-        .eq("id", id)
-        .eq("publisher_id", session.user.id)
-        .single();
+        .eq("publisher_id", session.user.id);
 
       if (error) {
-        console.error("Error fetching listing:", error);
-        setSaveMessage("Error loading listing.");
-      } else if (data) {
-        console.log("Fetched listing data:", data);
-        setListingDetails({
-          title: data.title || "",
-          category: data.category || "",
-          website: data.website || "",
+        console.error("Error fetching listings:", error);
+        setIsLoading(false);
+        return;
+      }
+
+      if (data) {
+        const parsedListings: Listing[] = data.map((listing: Listing) => {
+          if (typeof listing.selected_frames === "string") {
+            try {
+              listing.selected_frames = JSON.parse(listing.selected_frames);
+            } catch (err) {
+              console.error("Error parsing selected_frames for listing", listing.id, err);
+              listing.selected_frames = {};
+            }
+          }
+          if (listing.id === id) {
+            setListingDetails({
+              title: listing.title || "",
+              category: listing.category || "",
+              website: listing.website || "",
+            });
+            setSelectedFrames(listing.selected_frames || {});
+          }
+          return listing;
         });
-        setSelectedFrames(data.selected_frames || {});
+        setListings(parsedListings);
       }
       setIsLoading(false);
     }
-    fetchListing();
+    fetchListings();
   }, [session, id]);
 
-  const handleDetailChange = (e) => {
+  const handleDetailChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setListingDetails((prev) => ({ ...prev, [name]: value }));
   };
 
-  const toggleFrame = (frameId) => {
+  const toggleFrame = (frameId: string) => {
     setSelectedFrames((prev) => {
       if (prev[frameId]) {
         const updated = { ...prev };
@@ -68,11 +118,12 @@ function EditListing({ session }) {
         return updated;
       }
       const frameInfo = availableFrames.find((f) => f.id === frameId);
+      if (!frameInfo) return prev;
       return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: "" } };
     });
   };
 
-  const handlePriceChange = (frameId, value) => {
+  const handlePriceChange = (frameId: string, value: string) => {
     setSelectedFrames((prev) => ({
       ...prev,
       [frameId]: { ...prev[frameId], pricePerClick: value },
@@ -80,10 +131,11 @@ function EditListing({ session }) {
   };
 
   const generateCode = () => {
-    if (!id) {
+    if (!currentListingId) {
       setEmbedCode("Please save the listing first to generate the embed code.");
       return;
     }
+
     const baseUrl = "https://adsync.vendomedia.net/api/serve-active-ad";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
     const frameKeys = Object.keys(selectedFrames);
@@ -95,7 +147,7 @@ function EditListing({ session }) {
       const [width, height] = size.split("x");
 
       code += `<div class="ad-slot" id="ad-slot-${slotId}">\n`;
-      code += `  <iframe src="${baseUrl}?listingId=${id}&slotId=${slotId}" `;
+      code += `  <iframe src="${baseUrl}?listingId=${currentListingId}&slotId=${slotId}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
       code += `</div>\n`;
     });
@@ -124,7 +176,11 @@ function EditListing({ session }) {
       }
     }
 
-    // Fetch the existing listing to merge frames
+    if (!id) {
+      setSaveMessage("Invalid listing ID.");
+      return;
+    }
+
     const { data: existingListing, error: fetchError } = await supabase
       .from("listings")
       .select("selected_frames")
@@ -149,18 +205,27 @@ function EditListing({ session }) {
     };
 
     try {
-      const { error } = await supabase
+      const { data, error: updateError } = await supabase
         .from("listings")
         .update(payload)
         .eq("id", id)
-        .eq("publisher_id", session.user.id);
+        .eq("publisher_id", session.user.id)
+        .select();
 
-      if (error) throw new Error("Error updating listing: " + error.message);
+      if (updateError) {
+        throw new Error("Error updating listing: " + updateError.message);
+      }
       setSaveMessage("Listing updated successfully!");
+      setCurrentListingId(id);
+      setListings((prev) =>
+        prev.map((listing) =>
+          listing.id === id ? { ...listing, ...payload } : listing
+        )
+      );
       generateCode();
     } catch (err) {
       console.error("Error saving listing:", err);
-      setSaveMessage("Error saving listing: " + err.message);
+      setSaveMessage("Error saving listing: " + (err as Error).message);
     }
   };
 
@@ -275,6 +340,58 @@ function EditListing({ session }) {
           <p className="font-medium mb-1">Selected Frames JSON:</p>
           <pre className="bg-gray-100 p-2 rounded text-black">{JSON.stringify(selectedFrames, null, 2)}</pre>
         </div>
+      </div>
+
+      <div className="p-6 shadow border border-gray-200 rounded-xl bg-white text-black">
+        <h2 className="text-2xl font-bold mb-4">My Listings</h2>
+        {isLoading ? (
+          <p>Loading listings...</p>
+        ) : listings.length === 0 ? (
+          <p>No listings found.</p>
+        ) : (
+          <div className="space-y-6">
+            {listings.map((listing, index) => (
+              <div
+                key={listing.id}
+                className="p-6 shadow border border-gray-200 rounded-xl"
+              >
+                <h3 className="text-xl font-semibold mb-2">
+                  Listing #{index + 1}
+                </h3>
+                <p>
+                  <strong>Title:</strong> {listing.title}
+                </p>
+                <p>
+                  <strong>Category:</strong> {listing.category}
+                </p>
+                <p>
+                  <strong>Website:</strong> {listing.website}
+                </p>
+                <div className="mt-2">
+                  <strong>Ad Frames:</strong>{" "}
+                  {listing.selected_frames &&
+                    Object.keys(listing.selected_frames).map((key) => (
+                      <span
+                        key={key}
+                        className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2"
+                      >
+                        {listing.selected_frames[key].size} - $
+                        {listing.selected_frames[key].pricePerClick || "N/A"} per click
+                      </span>
+                    ))}
+                </div>
+                <div className="mt-4">
+                  <Link
+                    to={`/edit-listing/${listing.id}`}
+                    className="px-4 py-2 bg-blue-600 text-white rounded"
+                  >
+                    Modify Listing
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
