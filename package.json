@@ -37,5 +37,10 @@
     "postcss": "^8.4.31",
     "tailwindcss": "^3.4.1",
     "vite": "^6.2.1"
+  },
+  "vercel": {
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
+    "framework": "vite"
   }
 }
