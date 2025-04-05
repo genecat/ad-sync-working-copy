@@ -1,44 +1,8 @@
-import React, { useState, useEffect, ChangeEvent } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-// Define types for the data structures
-interface Frame {
-  id: string;
-  size: string;
-}
-
-interface FrameData {
-  size: string;
-  pricePerClick: string;
-}
-
-interface Listing {
-  id: string;
-  title: string;
-  category: string;
-  website: string;
-  publisher_id: string;
-  selected_frames: { [key: string]: FrameData };
-}
-
-interface Session {
-  user: {
-    id: string;
-  };
-}
-
-interface ListingDetails {
-  title: string;
-  category: string;
-  website: string;
-}
-
-interface EditListingProps {
-  session: Session | null;
-}
-
-const availableFrames: Frame[] = [
+const availableFrames = [
   { id: "frame1", size: "300x250" },
   { id: "frame2", size: "728x90" },
   { id: "frame3", size: "640x480" },
@@ -46,19 +10,19 @@ const availableFrames: Frame[] = [
   { id: "frame5", size: "480x640" },
 ];
 
-function EditListing({ session }: EditListingProps) {
-  const { id } = useParams<{ id: string }>();
-  const [listingDetails, setListingDetails] = useState<ListingDetails>({
+function EditListing({ session }) {
+  const { id } = useParams();
+  const [listingDetails, setListingDetails] = useState({
     title: "",
     category: "",
     website: "",
   });
-  const [selectedFrames, setSelectedFrames] = useState<{ [key: string]: FrameData }>({});
-  const [embedCode, setEmbedCode] = useState<string>("");
-  const [saveMessage, setSaveMessage] = useState<string>("");
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [currentListingId, setCurrentListingId] = useState<string | null>(id || null);
+  const [selectedFrames, setSelectedFrames] = useState({});
+  const [embedCode, setEmbedCode] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [listings, setListings] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentListingId, setCurrentListingId] = useState(id);
 
   useEffect(() => {
     async function fetchListings() {
@@ -71,15 +35,10 @@ function EditListing({ session }: EditListingProps) {
         .from("listings")
         .select("*")
         .eq("publisher_id", session.user.id);
-
       if (error) {
         console.error("Error fetching listings:", error);
-        setIsLoading(false);
-        return;
-      }
-
-      if (data) {
-        const parsedListings: Listing[] = data.map((listing: Listing) => {
+      } else {
+        const parsedListings = data.map((listing) => {
           if (typeof listing.selected_frames === "string") {
             try {
               listing.selected_frames = JSON.parse(listing.selected_frames);
@@ -98,19 +57,19 @@ function EditListing({ session }: EditListingProps) {
           }
           return listing;
         });
-        setListings(parsedListings);
+        setListings(parsedListings || []);
       }
       setIsLoading(false);
     }
     fetchListings();
   }, [session, id]);
 
-  const handleDetailChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleDetailChange = (e) => {
     const { name, value } = e.target;
     setListingDetails((prev) => ({ ...prev, [name]: value }));
   };
 
-  const toggleFrame = (frameId: string) => {
+  const toggleFrame = (frameId) => {
     setSelectedFrames((prev) => {
       if (prev[frameId]) {
         const updated = { ...prev };
@@ -118,12 +77,11 @@ function EditListing({ session }: EditListingProps) {
         return updated;
       }
       const frameInfo = availableFrames.find((f) => f.id === frameId);
-      if (!frameInfo) return prev;
       return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: "" } };
     });
   };
 
-  const handlePriceChange = (frameId: string, value: string) => {
+  const handlePriceChange = (frameId, value) => {
     setSelectedFrames((prev) => ({
       ...prev,
       [frameId]: { ...prev[frameId], pricePerClick: value },
@@ -176,11 +134,6 @@ function EditListing({ session }: EditListingProps) {
       }
     }
 
-    if (!id) {
-      setSaveMessage("Invalid listing ID.");
-      return;
-    }
-
     const { data: existingListing, error: fetchError } = await supabase
       .from("listings")
       .select("selected_frames")
@@ -225,7 +178,7 @@ function EditListing({ session }: EditListingProps) {
       generateCode();
     } catch (err) {
       console.error("Error saving listing:", err);
-      setSaveMessage("Error saving listing: " + (err as Error).message);
+      setSaveMessage("Error saving listing: " + err.message);
     }
   };
 
