@@ -182,7 +182,7 @@ function App() {
   console.log("App render - Session:", session, "Role:", role, "Path:", window.location.pathname);
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/">
       {session && <Navigation />}
       {error && (
         <div className="p-4 bg-red-100 text-red-700">
