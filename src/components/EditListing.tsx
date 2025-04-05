@@ -10,78 +10,81 @@ const availableFrames = [
   { id: "frame5", size: "480x640" },
 ];
 
-function EditListing({ session }) {
-  const { id } = useParams();
-  const [listingDetails, setListingDetails] = useState({
-    title: "",
-    category: "",
-    website: "",
-  });
-  const [selectedFrames, setSelectedFrames] = useState({});
+type Frame = {
+  size: string;
+  pricePerClick: string;
+};
+
+type Listing = {
+  id: string;
+  title: string;
+  category: string;
+  website: string;
+  selected_frames: { [key: string]: Frame };
+};
+
+function EditListing({ session }: { session: any }) {
+  const { id } = useParams<{ id: string }>();
+  const [listingDetails, setListingDetails] = useState({ title: "", category: "", website: "" });
+  const [selectedFrames, setSelectedFrames] = useState<{ [key: string]: Frame }>({});
   const [embedCode, setEmbedCode] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
-  const [listings, setListings] = useState([]);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [listings, setListings] = useState<Listing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentListingId, setCurrentListingId] = useState(id);
 
   useEffect(() => {
     async function fetchListings() {
-      if (!session?.user?.id) {
-        setIsLoading(false);
-        return;
-      }
-      console.log("Fetching listings for user:", session.user.id);
-      const { data, error } = await supabase
-        .from("listings")
-        .select("*")
-        .eq("publisher_id", session.user.id);
+      if (!session?.user?.id) return setIsLoading(false);
+
+      const { data, error } = await supabase.from("listings").select("*").eq("publisher_id", session.user.id);
       if (error) {
         console.error("Error fetching listings:", error);
       } else {
-        const parsedListings = data.map((listing) => {
-          if (typeof listing.selected_frames === "string") {
+        const parsed = (data || []).map((l: any) => {
+          let selected_frames: { [key: string]: Frame } = {};
+          if (typeof l.selected_frames === "string") {
             try {
-              listing.selected_frames = JSON.parse(listing.selected_frames);
-            } catch (err) {
-              console.error("Error parsing selected_frames for listing", listing.id, err);
-              listing.selected_frames = {};
+              selected_frames = JSON.parse(l.selected_frames);
+            } catch {
+              selected_frames = {};
             }
+          } else {
+            selected_frames = l.selected_frames || {};
           }
-          if (listing.id === id) {
-            setListingDetails({
-              title: listing.title || "",
-              category: listing.category || "",
-              website: listing.website || "",
-            });
-            setSelectedFrames(listing.selected_frames || {});
+          if (l.id === id) {
+            setListingDetails({ title: l.title || "", category: l.category || "", website: l.website || "" });
+            setSelectedFrames(selected_frames);
           }
-          return listing;
+          return { ...l, selected_frames } as Listing;
         });
-        setListings(parsedListings || []);
+        setListings(parsed);
       }
       setIsLoading(false);
     }
     fetchListings();
   }, [session, id]);
 
-  const handleDetailChange = (e) => {
+  const handleDetailChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setListingDetails((prev) => ({ ...prev, [name]: value }));
   };
 
-  const toggleFrame = (frameId) => {
+  const toggleFrame = (frameId: string) => {
+    const frameInfo = availableFrames.find((f) => f.id === frameId);
+    if (!frameInfo) return;
     setSelectedFrames((prev) => {
       if (prev[frameId]) {
         const updated = { ...prev };
         delete updated[frameId];
         return updated;
       }
-      const frameInfo = availableFrames.find((f) => f.id === frameId);
       return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: "" } };
     });
   };
 
-  const handlePriceChange = (frameId, value) => {
+  const handlePriceChange = (frameId: string, value: string) => {
     setSelectedFrames((prev) => ({
       ...prev,
       [frameId]: { ...prev[frameId], pricePerClick: value },
@@ -93,98 +96,60 @@ function EditListing({ session }) {
       setEmbedCode("Please save the listing first to generate the embed code.");
       return;
     }
-
-    const baseUrl = "https://adsync.vendomedia.net/api/serve-active-ad";
+    setCopyMessage("HTML embed code generated!");
+    const baseUrl = "https://adsync.vendomedia.net/api/serve-ad";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
-    const frameKeys = Object.keys(selectedFrames);
-
-    frameKeys.forEach((frameKey, index) => {
-      const slotId = index + 1;
-      const frameData = selectedFrames[frameKey];
-      const size = frameData.size || "300x250";
+    const keys = Object.keys(selectedFrames);
+    keys.forEach((key, i) => {
+      const slotId = i + 1;
+      const { size } = selectedFrames[key];
       const [width, height] = size.split("x");
-
-      code += `<div class="ad-slot" id="ad-slot-${slotId}">\n`;
-      code += `  <iframe src="${baseUrl}?listingId=${currentListingId}&slotId=${slotId}" `;
-      code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
-      code += `</div>\n`;
+      code += `<div class="ad-slot" id="ad-slot-${key}">\n`;
+      code += `  <iframe src="${baseUrl}/${currentListingId}?frame=${key}" width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
+      code += `</div>\n<script>\n(function() {\n  const adSlot = document.getElementById('ad-slot-${key}');\n  fetch('${baseUrl}/check-ad-status?listingId=${currentListingId}&frameId=${key}')\n    .then(res => res.json())\n    .then(data => { if (!data.isActive) adSlot.style.display = 'none'; })\n    .catch(() => adSlot.style.display = 'none');\n  setInterval(() => fetch('${baseUrl}/check-ad-status?listingId=${currentListingId}&frameId=${key}')\n    .then(res => res.json())\n    .then(data => { if (!data.isActive) adSlot.style.display = 'none'; })\n    .catch(() => adSlot.style.display = 'none'), 300000);\n})();\n</script>\n`;
     });
-
-    code += "<!-- Ad Exchange Embed Code End -->\n";
+    code += "<!-- Ad Exchange Embed Code End -->";
     setEmbedCode(code);
   };
 
   const saveListing = async () => {
-    if (!session) {
-      setSaveMessage("You must be logged in to save a listing.");
-      return;
-    }
-    if (!listingDetails.title || !listingDetails.category || !listingDetails.website) {
-      setSaveMessage("Please fill in all fields.");
-      return;
-    }
-    if (Object.keys(selectedFrames).length === 0) {
-      setSaveMessage("Please select at least one ad frame.");
-      return;
-    }
+    if (!session) return setSaveMessage("You must be logged in to save a listing.");
+    const { title, category, website } = listingDetails;
+    if (!title || !category || !website) return setSaveMessage("Please fill in all fields.");
+    if (Object.keys(selectedFrames).length === 0) return setSaveMessage("Select at least one ad frame.");
     for (const frameId in selectedFrames) {
       if (!selectedFrames[frameId].pricePerClick) {
-        setSaveMessage(`Please enter a price for frame ${frameId}.`);
-        return;
+        return setSaveMessage(`Enter a price for frame ${frameId}.`);
       }
     }
 
-    const { data: existingListing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await supabase
       .from("listings")
       .select("selected_frames")
       .eq("id", id)
       .eq("publisher_id", session.user.id)
       .single();
 
-    if (fetchError) {
-      console.error("Error fetching existing listing:", fetchError);
-      setSaveMessage("Error loading existing listing.");
-      return;
-    }
+    if (fetchError) return setSaveMessage("Error loading listing.");
 
-    const existingFrames = existingListing?.selected_frames || {};
-    const updatedFrames = { ...existingFrames, ...selectedFrames };
+    const updatedFrames = { ...existing?.selected_frames, ...selectedFrames };
 
-    const payload = {
-      title: listingDetails.title,
-      category: listingDetails.category,
-      website: listingDetails.website,
-      selected_frames: updatedFrames,
-    };
+    const payload = { ...listingDetails, selected_frames: updatedFrames };
 
-    try {
-      const { data, error: updateError } = await supabase
-        .from("listings")
-        .update(payload)
-        .eq("id", id)
-        .eq("publisher_id", session.user.id)
-        .select();
+    const { error: updateError } = await supabase
+      .from("listings")
+      .update(payload)
+      .eq("id", id)
+      .eq("publisher_id", session.user.id);
 
-      if (updateError) {
-        throw new Error("Error updating listing: " + updateError.message);
-      }
-      setSaveMessage("Listing updated successfully!");
-      setCurrentListingId(id);
-      setListings((prev) =>
-        prev.map((listing) =>
-          listing.id === id ? { ...listing, ...payload } : listing
-        )
-      );
-      generateCode();
-    } catch (err) {
-      console.error("Error saving listing:", err);
-      setSaveMessage("Error saving listing: " + err.message);
-    }
+    if (updateError) return setSaveMessage("Error saving listing: " + updateError.message);
+
+    setSaveMessage("Listing updated successfully!");
+    setCurrentListingId(id);
+    generateCode();
   };
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
+  if (isLoading) return <div>Loading...</div>;
 
   return (
     <div className="max-w-4xl mx-auto my-10 px-4 space-y-10">
@@ -285,6 +250,7 @@ function EditListing({ session }) {
               <button onClick={() => navigator.clipboard.writeText(embedCode)} className="bg-green-600 text-white px-4 py-2 rounded">
                 Copy Code
               </button>
+              {copyMessage && <p className="mt-2 text-sm text-green-600">{copyMessage}</p>}
             </div>
           </div>
         )}
@@ -303,41 +269,24 @@ function EditListing({ session }) {
           <p>No listings found.</p>
         ) : (
           <div className="space-y-6">
-            {listings.map((listing, index) => (
-              <div
-                key={listing.id}
-                className="p-6 shadow border border-gray-200 rounded-xl"
-              >
-                <h3 className="text-xl font-semibold mb-2">
-                  Listing #{index + 1}
-                </h3>
-                <p>
-                  <strong>Title:</strong> {listing.title}
-                </p>
-                <p>
-                  <strong>Category:</strong> {listing.category}
-                </p>
-                <p>
-                  <strong>Website:</strong> {listing.website}
-                </p>
+            {listings.map((listing: Listing, index) => (
+              <div key={listing.id} className="p-6 shadow border border-gray-200 rounded-xl">
+                <h3 className="text-xl font-semibold mb-2">Listing #{index + 1}</h3>
+                <p><strong>Title:</strong> {listing.title}</p>
+                <p><strong>Category:</strong> {listing.category}</p>
+                <p><strong>Website:</strong> {listing.website}</p>
                 <div className="mt-2">
                   <strong>Ad Frames:</strong>{" "}
                   {listing.selected_frames &&
                     Object.keys(listing.selected_frames).map((key) => (
-                      <span
-                        key={key}
-                        className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2"
-                      >
+                      <span key={key} className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2">
                         {listing.selected_frames[key].size} - $
                         {listing.selected_frames[key].pricePerClick || "N/A"} per click
                       </span>
                     ))}
                 </div>
                 <div className="mt-4">
-                  <Link
-                    to={`/edit-listing/${listing.id}`}
-                    className="px-4 py-2 bg-blue-600 text-white rounded"
-                  >
+                  <Link to={`/edit-listing/${listing.id}`} className="px-4 py-2 bg-blue-600 text-white rounded">
                     Modify Listing
                   </Link>
                 </div>
@@ -351,3 +300,4 @@ function EditListing({ session }) {
 }
 
 export default EditListing;
+
