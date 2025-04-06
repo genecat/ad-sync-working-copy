@@ -9,107 +9,65 @@ export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.removeHeader('X-Frame-Options'); // Remove the X-Frame-Options header
+  res.removeHeader('X-Frame-Options');
 
   if (req.method === 'OPTIONS') {
-    console.log('[serve-ad] Handling OPTIONS request');
     return res.status(200).end();
   }
 
-  const listingId = req.params?.listingId || req.query?.listingId;
-  const frame = req.query?.frame || req.query?.['frame[]'];
+  const listingId = req.query?.listingId || req.params?.listingId;
+  const frame = req.query?.frame;
   const campaignId = req.query?.campaignId;
 
-  console.log('[serve-ad] Request URL:', req.url);
-  console.log('[serve-ad] req.params:', req.params);
-  console.log('[serve-ad] req.query:', req.query);
-  console.log('[serve-ad] Listing ID:', listingId, 'Frame:', frame, 'Campaign ID:', campaignId);
-
   if (!frame) {
-    console.log('[serve-ad] Missing Frame Parameter:', { frame });
-    res.status(400).send('Missing frame parameter');
-    return;
+    return res.status(400).send('Missing frame parameter');
   }
 
-  console.log('[serve-ad] Querying frames table with frame_id:', frame);
   const { data: frameData, error: frameError } = await supabase
     .from('frames')
     .select('frame_id, campaign_id, uploaded_file, price_per_click, size')
     .eq('frame_id', frame);
 
-  console.log('[serve-ad] Frame Query Result:', { frameData, frameError });
-
-  if (frameError) {
-    console.error('[serve-ad] Frame Query Error:', frameError);
-    res.status(500).send('Error fetching frame data');
-    return;
-  }
-
-  if (!frameData || frameData.length === 0) {
-    console.log('[serve-ad] No frame data found for frame:', frame);
-    res.status(404).send('Frame not found');
-    return;
+  if (frameError || !frameData || frameData.length === 0) {
+    return res.status(200).send(''); // Do not error out, return blank
   }
 
   const frameRecord = frameData[0];
-  console.log('[serve-ad] Frame Data:', frameRecord);
 
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
-    .select('id, campaign_details')
+    .select('id, campaign_details, status')
     .eq('id', frameRecord.campaign_id)
     .single();
 
-  console.log('[serve-ad] Campaign Query Result:', { campaign, campaignError });
-
-  if (campaignError) {
-    console.error('[serve-ad] Campaign Query Error:', campaignError);
-    res.status(404).send('Campaign not found');
-    return;
+  if (campaignError || !campaign || campaign.status !== 'approved') {
+    return res.status(200).send(''); // Return blank if not approved or missing
   }
-
-  if (!campaign) {
-    console.log('[serve-ad] No campaign data found for campaign_id:', frameRecord.campaign_id);
-    res.status(404).send('Campaign not found');
-    return;
-  }
-
-  console.log('[serve-ad] Campaign Data:', campaign);
 
   const endDate = new Date(
     campaign.campaign_details.endDate.year,
     campaign.campaign_details.endDate.month - 1,
     campaign.campaign_details.endDate.day
   );
+
   const today = new Date();
-  console.log('[serve-ad] End Date:', endDate, 'Today:', today);
   if (endDate < today) {
-    console.log('[serve-ad] Campaign has expired. End Date:', endDate, 'Today:', today);
-    res.status(400).send('Campaign has expired');
-    return;
+    return res.status(200).send(''); // Campaign expired: show nothing
   }
 
-  let imageUrl;
-  if (frameRecord.uploaded_file.startsWith('http')) {
-    imageUrl = frameRecord.uploaded_file;
-  } else {
-    imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frameRecord.uploaded_file}`;
-  }
+  let imageUrl = frameRecord.uploaded_file.startsWith('http')
+    ? frameRecord.uploaded_file
+    : `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-creatives/${frameRecord.uploaded_file}`;
 
-  const targetUrl = campaign.campaign_details.targetURL || "https://mashdrop.com";
-
-  console.log('[serve-ad] Final Image URL:', imageUrl);
-  console.log('[serve-ad] Target URL:', targetUrl);
+  const targetUrl = campaign.campaign_details.targetURL || 'https://mashdrop.com';
 
   try {
-    const response = await fetch('https://my-ad-agency-9vlbk25px-genecats-projects.vercel.app/api/track-impression', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ frame: frame, campaignId: campaignId || frameRecord.campaign_id })
+    await fetch('https://adsync.vendomedia.net/api/record-impression?frame=' + frame + '&campaignId=' + (campaignId || frameRecord.campaign_id), {
+      method: 'GET',
+      mode: 'no-cors'
     });
-    console.log('[serve-ad] Impression tracked:', await response.json());
   } catch (error) {
-    console.error('[serve-ad] Error tracking impression:', error.message);
+    console.error('[track-impression] Error:', error.message);
   }
 
   res.status(200).setHeader('Content-Type', 'text/html').send(`
@@ -135,20 +93,13 @@ export default async (req, res) => {
           if (e.target.tagName === 'IMG' && !isClicking) {
             isClicking = true;
             e.preventDefault();
-            console.log('Click event triggered for ad');
-            fetch('https://my-ad-agency-9vlbk25px-genecats-projects.vercel.app/api/track-click', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ frame: '${frame}', campaignId: '${campaignId || frameRecord.campaign_id}' })
-            }).then(response => {
-              console.log('Click tracked:', response);
-              return response.json();
-            }).then(data => {
-              console.log('Click response:', data);
+            fetch('https://adsync.vendomedia.net/api/record-click?frame=${frame}&campaignId=${campaignId || frameRecord.campaign_id}', {
+              method: 'GET',
+              mode: 'no-cors'
+            }).then(() => {
               window.open('${targetUrl}', '_blank');
               isClicking = false;
             }).catch(error => {
-              console.error('Error tracking click:', error);
               window.open('${targetUrl}', '_blank');
               isClicking = false;
             });
