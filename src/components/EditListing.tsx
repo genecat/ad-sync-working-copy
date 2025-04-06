@@ -99,14 +99,11 @@ function EditListing({ session }: { session: any }) {
     setCopyMessage("HTML embed code generated!");
     const baseUrl = "https://adsync.vendomedia.net/api/serve-ad";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
-    const keys = Object.keys(selectedFrames);
-    keys.forEach((key, i) => {
-      const slotId = i + 1;
-      const { size } = selectedFrames[key];
-      const [width, height] = size.split("x");
-      code += `<div class="ad-slot" id="ad-slot-${key}">\n`;
-      code += `  <iframe src="${baseUrl}/${currentListingId}?frame=${key}" width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
-      code += `</div>\n<script>\n(function() {\n  const adSlot = document.getElementById('ad-slot-${key}');\n  fetch('${baseUrl}/check-ad-status?listingId=${currentListingId}&frameId=${key}')\n    .then(res => res.json())\n    .then(data => { if (!data.isActive) adSlot.style.display = 'none'; })\n    .catch(() => adSlot.style.display = 'none');\n  setInterval(() => fetch('${baseUrl}/check-ad-status?listingId=${currentListingId}&frameId=${key}')\n    .then(res => res.json())\n    .then(data => { if (!data.isActive) adSlot.style.display = 'none'; })\n    .catch(() => adSlot.style.display = 'none'), 300000);\n})();\n</script>\n`;
+    Object.entries(selectedFrames).forEach(([frameId, frame], i) => {
+      const [width, height] = frame.size.split("x");
+      code += `<div class="ad-slot" id="ad-slot-${frameId}">\n`;
+      code += `  <iframe src="${baseUrl}/${currentListingId}?frame=${frameId}" width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
+      code += `</div>\n<script>\n(function() {\n  const adSlot = document.getElementById('ad-slot-${frameId}');\n  fetch('${baseUrl}/check-ad-status?listingId=${currentListingId}&frameId=${frameId}')\n    .then(res => res.json())\n    .then(data => { if (!data.isActive) adSlot.style.display = 'none'; })\n    .catch(() => adSlot.style.display = 'none');\n  setInterval(() => fetch('${baseUrl}/check-ad-status?listingId=${currentListingId}&frameId=${frameId}')\n    .then(res => res.json())\n    .then(data => { if (!data.isActive) adSlot.style.display = 'none'; })\n    .catch(() => adSlot.style.display = 'none'), 300000);\n})();\n</script>\n`;
     });
     code += "<!-- Ad Exchange Embed Code End -->";
     setEmbedCode(code);
@@ -196,6 +193,7 @@ function EditListing({ session }: { session: any }) {
             />
           </div>
         </div>
+
         <h2 className="text-xl font-semibold mb-3">Available Ad Frames</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {availableFrames.map((frame) => {
@@ -230,6 +228,7 @@ function EditListing({ session }: { session: any }) {
             );
           })}
         </div>
+
         <div className="flex flex-wrap items-center gap-4 mb-4">
           <button onClick={() => generateCode()} className="bg-blue-600 text-white px-4 py-2 rounded">
             Generate HTML Code
@@ -238,6 +237,7 @@ function EditListing({ session }: { session: any }) {
             Save Listing
           </button>
         </div>
+
         {embedCode && (
           <div className="mb-6">
             <h2 className="text-xl font-semibold mb-2">Your Embed Code:</h2>
@@ -254,7 +254,9 @@ function EditListing({ session }: { session: any }) {
             </div>
           </div>
         )}
+
         {saveMessage && <p className="mt-2 text-sm text-black">{saveMessage}</p>}
+
         <div className="mt-4">
           <p className="font-medium mb-1">Selected Frames JSON:</p>
           <pre className="bg-gray-100 p-2 rounded text-black">{JSON.stringify(selectedFrames, null, 2)}</pre>
@@ -300,4 +302,3 @@ function EditListing({ session }: { session: any }) {
 }
 
 export default EditListing;
-
