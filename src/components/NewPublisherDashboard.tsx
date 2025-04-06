@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom"; // Added useNavigate
+import { Link, useNavigate } from "react-router-dom"; // useNavigate supports redirecting to modify listing
 import { usePublisherDashboardData } from "../hooks/usePublisherDashboardData";
 import { supabase } from "../lib/supabaseClient";
 import { useToast } from "../hooks/use-toast";
@@ -84,20 +84,19 @@ function NewPublisherDashboard({ session }) {
     }
   };
 
-  const handleModifyListing = (listingId) => {
-    if (!listingId) {
-      console.error("No listing ID provided for redirect");
+  const handleModifyListing = (listing) => {
+    if (!listing?.id) {
       toast({ title: "Error", description: "Invalid listing ID" });
       return;
     }
-    console.log("Redirecting to /edit-listing/", listingId);
-    navigate(`/edit-listing/${listingId}`); // Force redirect
+    console.log("Redirecting to /edit-listing/", listing.id);
+    navigate(`/edit-listing/${listing.id}`);
   };
 
   if (isLoading) {
     return (
       <div className="max-w-5xl mx-auto my-10 px-4 bg-modern-bg text-modern-text">
-        <h1 className="text-3xl font-bold mb-6">Publisher Dashboard</h1>
+        <h1 className="text-3xl font-bold mb-6">Publisher Dashboard (Loading...)</h1>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {[...Array(4)].map((_, index) => (
             <div key={index} className="bg-modern-card shadow-card rounded-lg h-24 animate-pulse" />
@@ -111,6 +110,14 @@ function NewPublisherDashboard({ session }) {
       </div>
     );
   }
+
+  console.log("Rendered Campaign Stats:", campaignStats.map(c => ({
+    id: c.campaign_id,
+    status: c.status,
+    isActive: c.isActive,
+    listing: c.listing_id,
+    frame: c.frame,
+  })));
 
   return (
     <div className="max-w-5xl mx-auto my-10 px-4 bg-modern-bg text-modern-text">
@@ -171,7 +178,7 @@ function NewPublisherDashboard({ session }) {
                   </div>
                   <div className="mt-4">
                     <button
-                      onClick={() => handleModifyListing(listing.id)}
+                      onClick={() => handleModifyListing(listing)}
                       className="bg-modern-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-modern-primary-dark transition"
                     >
                       Modify Listing
@@ -190,32 +197,36 @@ function NewPublisherDashboard({ session }) {
       {pendingCampaigns.length > 0 ? (
         pendingCampaigns.map((campaign) => (
           <div
-            key={campaign.campaign_id}
+            key={`${campaign.campaign_id}-${campaign.frame}`}
             className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
-                {campaign.campaigns?.name || "Unknown"}
+                {campaign.campaigns?.name ?? campaign.frame ?? "Untitled Campaign"}
               </h3>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleCampaignDecision(campaign.campaign_id, "approved")}
-                  className="bg-green-500 text-white px-4 py-1 rounded-lg hover:bg-green-600 transition"
-                >
-                  Accept
-                </button>
-                <button
-                  onClick={() => handleCampaignDecision(campaign.campaign_id, "rejected")}
-                  className="bg-red-500 text-white px-4 py-1 rounded-lg hover:bg-red-600 transition"
-                >
-                  Reject
-                </button>
+                <form className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCampaignDecision(campaign.campaign_id, "approved")}
+                    className="bg-green-500 text-white px-4 py-1 rounded-lg hover:bg-green-600 transition"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCampaignDecision(campaign.campaign_id, "rejected")}
+                    className="bg-red-500 text-white px-4 py-1 rounded-lg hover:bg-red-600 transition"
+                  >
+                    Reject
+                  </button>
+                </form>
               </div>
             </div>
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <p className="text-sm font-medium mb-1">
-                  Campaign Title: {campaign.campaigns?.name || "Unknown"}
+                  Campaign Title: {campaign.campaigns?.name ?? campaign.frame ?? "Untitled Campaign"}
                 </p>
                 <p className="text-sm">
                   Frame: {campaign.frame || "Unknown"}
@@ -228,11 +239,12 @@ function NewPublisherDashboard({ session }) {
                 </p>
               </div>
               <div className="w-full md:w-24 flex-shrink-0">
-                {campaign.uploaded_file ? (
+                {campaign.campaigns?.creativeImage ? (
                   <img
-                    src={campaign.uploaded_file}
+                    src={campaign.campaigns.creativeImage}
                     alt="Ad Creative"
-                    className="w-full h-24 object-cover rounded-lg"
+                    className="w-full h-24 object-cover rounded-lg cursor-pointer"
+                    onClick={() => window.open(campaign.campaigns.creativeImage, "_blank")}
                   />
                 ) : (
                   <div className="w-full h-24 bg-gray-100 flex items-center justify-center rounded-lg">
@@ -248,15 +260,15 @@ function NewPublisherDashboard({ session }) {
       )}
       <h2 className="text-2xl font-bold mb-4 mt-6">Live Campaigns</h2>
       {console.log("Rendering Live Campaigns:", liveCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
-      {liveCampaigns.length > 0 ? (
+      {Array.isArray(liveCampaigns) && liveCampaigns.length > 0 ? (
         liveCampaigns.map((campaign) => (
           <div
-            key={`${campaign.listing_id}-${campaign.frame}`}
+            key={campaign.campaign_id}
             className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
-                {campaign.campaigns?.name || "Unknown"}
+                {campaign.campaigns?.name ?? campaign.frame ?? "Untitled Campaign"}
               </h3>
               <div className="flex items-center gap-2">
                 <span
@@ -276,7 +288,7 @@ function NewPublisherDashboard({ session }) {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <p className="text-sm font-medium mb-1">
-                  Campaign Title: {campaign.campaigns?.name || "Unknown"}
+                  Campaign Title: {campaign.campaigns?.name ?? campaign.frame ?? "Untitled Campaign"}
                 </p>
                 <p className="text-sm">
                   Frame: {campaign.frame || "Unknown"}
@@ -295,11 +307,12 @@ function NewPublisherDashboard({ session }) {
                 </p>
               </div>
               <div className="w-full md:w-24 flex-shrink-0">
-                {campaign.uploaded_file ? (
+                {campaign.campaigns?.creativeImage ? (
                   <img
-                    src={campaign.uploaded_file}
+                    src={campaign.campaigns.creativeImage}
                     alt="Ad Creative"
-                    className="w-full h-24 object-cover rounded-lg"
+                    className="w-full h-24 object-cover rounded-lg cursor-pointer"
+                    onClick={() => window.open(campaign.campaigns.creativeImage, "_blank")}
                   />
                 ) : (
                   <div className="w-full h-24 bg-gray-100 flex items-center justify-center rounded-lg">
@@ -315,20 +328,21 @@ function NewPublisherDashboard({ session }) {
       )}
       <h2 className="text-2xl font-bold mb-4 mt-6">Archived Campaigns</h2>
       {console.log("Rendering Archived Campaigns:", archivedCampaigns.map(campaign => ({ id: campaign.campaign_id, status: campaign.status, isActive: campaign.isActive })))}
-      {archivedCampaigns.length > 0 ? (
+      {Array.isArray(archivedCampaigns) && archivedCampaigns.length > 0 ? (
         archivedCampaigns.map((campaign) => (
           <div
-            key={`${campaign.listing_id}-${campaign.frame}`}
+            key={campaign.campaign_id}
             className="p-4 bg-modern-card shadow-card rounded-lg mb-4"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
-                {campaign.campaigns?.name || "Unknown"}
+                {campaign.campaigns?.name ?? campaign.frame ?? "Untitled Campaign"}
               </h3>
               <div className="flex items-center gap-2">
                 <span
                   className="inline-block w-4 h-4 rounded-full bg-gray-500"
                   title="Archived"
+                  aria-label="Archived status indicator"
                 ></span>
                 <button
                   onClick={() => handleRestoreCampaign(campaign.campaign_id)}
@@ -341,7 +355,7 @@ function NewPublisherDashboard({ session }) {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <p className="text-sm font-medium mb-1">
-                  Campaign Title: {campaign.campaigns?.name || "Unknown"}
+                  Campaign Title: {campaign.campaigns?.name ?? campaign.frame ?? "Untitled Campaign"}
                 </p>
                 <p className="text-sm">
                   Frame: {campaign.frame || "Unknown"}
@@ -360,11 +374,12 @@ function NewPublisherDashboard({ session }) {
                 </p>
               </div>
               <div className="w-full md:w-24 flex-shrink-0">
-                {campaign.uploaded_file ? (
+                {campaign.campaigns?.creativeImage ? (
                   <img
-                    src={campaign.uploaded_file}
+                    src={campaign.campaigns.creativeImage}
                     alt="Ad Creative"
-                    className="w-full h-24 object-cover rounded-lg"
+                    className="w-full h-24 object-cover rounded-lg cursor-pointer"
+                    onClick={() => window.open(campaign.campaigns.creativeImage, "_blank")}
                   />
                 ) : (
                   <div className="w-full h-24 bg-gray-100 flex items-center justify-center rounded-lg">

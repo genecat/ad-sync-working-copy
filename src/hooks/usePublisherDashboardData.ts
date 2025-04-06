@@ -23,7 +23,12 @@ interface CampaignStat {
   pricePerClick?: number;
   isActive: boolean;
   status: string;
-  campaigns: { name: string; termination_date?: string; creativeImage?: string; budget?: string } | null;
+  campaigns: {
+    name: string;
+    termination_date?: string;
+    creativeImage?: string;
+    budget?: string;
+  } | null;
 }
 
 export function usePublisherDashboardData() {
@@ -60,11 +65,8 @@ export function usePublisherDashboardData() {
         .select("id, website, selected_frames")
         .eq("publisher_id", publisherId);
       if (listingError) throw new Error(`Listings fetch error: ${listingError.message}`);
-      if (!listingData || listingData.length === 0) {
-        throw new Error(`No listings found for publisher_id: ${publisherId}`);
-      }
 
-      const parsedListings = listingData.map((listing: any) => ({
+      const parsedListings = (listingData || []).map((listing: any) => ({
         ...listing,
         selected_frames:
           typeof listing.selected_frames === "string"
@@ -125,7 +127,7 @@ export function usePublisherDashboardData() {
           isActive = isWithinDateRange && isWithinBudget;
         }
 
-        const stat = {
+        return {
           listing_id: frame.listing_id,
           frame: frame.frame_id,
           campaign_id: frame.campaign_id,
@@ -144,16 +146,12 @@ export function usePublisherDashboardData() {
             budget: campaign?.campaign_details?.budget,
           },
         };
-        console.log(`Campaign ${stat.campaign_id}: status=${stat.status}, isActive=${stat.isActive}`);
-        return stat;
       });
 
       const approvedCampaigns = stats.filter(stat => stat.status === "approved");
-      console.log("Approved Campaigns:", approvedCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive })));
       const pendingCampaigns = stats.filter(stat => stat.status === "pending");
-      console.log("Pending Campaigns:", pendingCampaigns.map(stat => ({ id: stat.campaign_id, status: stat.status, isActive: stat.isActive })));
 
-      setCampaignStats(stats); // Include all campaigns (approved, pending, and archived)
+      setCampaignStats(stats);
       setPendingCampaigns(pendingCampaigns);
 
       const totalImps = approvedCampaigns.reduce((sum, stat) => sum + stat.impression_count, 0);
