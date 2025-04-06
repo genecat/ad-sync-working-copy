@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/serve-ad/:listingId",
-      "destination": "/api/serve-ad/index.js"
+      "destination": "/api/serve-ad/[listingId].js"
     },
     {
       "source": "/api/serve-campaign/:campaignId",
@@ -22,7 +22,7 @@
     }
   ],
   "functions": {
-    "api/serve-ad/index.js": {
+    "api/serve-ad/[listingId].js": {
       "memory": 128,
       "maxDuration": 10
     },
