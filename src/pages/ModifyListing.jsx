@@ -204,7 +204,7 @@ const ModifyListing = ({ session }) => {
       code += `        }\n`;
       code += `      } catch (error) {\n`;
       code += `        console.error("Error checking ad status:", error);\n`;
- rotate13      code += `        adSlot.style.display = "none";\n`;
+      code += `        adSlot.style.display = "none";\n`;
       code += `      }\n`;
       code += `    }\n`;
       code += `    checkAdStatus();\n`;
