@@ -15,7 +15,7 @@ const availableFrames = [
   { id: "frame5", size: "480x640" },
 ];
 
-const AddFrame = ({ session }) => {
+function AddFrame({ session }) {
   const { listingId } = useParams();
   const [listing, setListing] = useState(null);
   const [selectedFrames, setSelectedFrames] = useState({});
@@ -27,11 +27,17 @@ const AddFrame = ({ session }) => {
 
   useEffect(() => {
     async function fetchListing() {
+      if (!session?.user?.id) {
+        setError("You must be logged in to view or modify listings.");
+        return;
+      }
+
       const { data, error } = await supabase
         .from("listings")
         .select("*")
         .eq("id", listingId)
         .single();
+
       if (error) {
         setError("Error fetching listing: " + error.message);
       } else if (data) {
@@ -48,7 +54,7 @@ const AddFrame = ({ session }) => {
       }
     }
     fetchListing();
-  }, [listingId]);
+  }, [listingId, session]);
 
   const addFrame = (size, price) => {
     if (!price) {
@@ -63,17 +69,29 @@ const AddFrame = ({ session }) => {
     setSelectedFrames(updatedFrames);
     setNewFramePrice("");
     setError("");
+
+    // Generate embed code for the newly added frame
     generateCode(listingId, frameKey, updatedFrames);
   };
 
+  /**
+   * generateCode
+   * Builds the HTML embed snippet for a single new frame
+   * so the publisher can paste it into their website.
+   */
   const generateCode = (listingId, frameKey, frames) => {
+    // Our API route is now "/api/serve-ad/listingId"
+    // We'll pass listingId and frameKey as query params
     const baseUrl = "https://my-ad-agency.vercel.app";
     const frameData = frames[frameKey];
+    if (!frameData) return;
+
     const size = frameData.size || "Unknown";
     const [width, height] = size.split("x");
+
     let code = `<!-- Ad Exchange Embed Code Start -->\n`;
     code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
-    code += `  <iframe src="${baseUrl}/serve-ad/${listingId}?frame=${frameKey}" `;
+    code += `  <iframe src="${baseUrl}/api/serve-ad/listingId?listingId=${listingId}&frame=${frameKey}" `;
     code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
     code += `</div>\n`;
     code += `<script>\n`;
@@ -83,7 +101,8 @@ const AddFrame = ({ session }) => {
     code += `    const adSlot = document.getElementById('ad-slot-${frameKey}');\n`;
     code += `    async function checkAdStatus() {\n`;
     code += `      try {\n`;
-    code += `        const response = await fetch('${baseUrl}/api/check-ad-status?listingId=${listingId}&frameId=${frameId}');\n`;
+    code += `        // We'll call '/api/check-ad-status' to see if the ad is active\n`;
+    code += `        const response = await fetch(\`${baseUrl}/api/check-ad-status?listingId=\${listingId}&frameId=\${frameId}\`);\n`;
     code += `        const data = await response.json();\n`;
     code += `        if (!data.isActive) {\n`;
     code += `          adSlot.style.display = 'none';\n`;
@@ -94,22 +113,32 @@ const AddFrame = ({ session }) => {
     code += `      }\n`;
     code += `    }\n`;
     code += `    checkAdStatus();\n`;
+    code += `    // Re-check the ad status every 5 minutes\n`;
     code += `    setInterval(checkAdStatus, 5 * 60 * 1000);\n`;
     code += `  })();\n`;
     code += `</script>\n`;
     code += `<!-- Ad Exchange Embed Code End -->\n`;
+
     setEmbedCode(code);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!listingId) {
+      setError("Missing or invalid listing ID.");
+      return;
+    }
+
     const payload = {
       selected_frames: selectedFrames,
     };
+
+    // Save updated frames to Supabase
     const { error } = await supabase
       .from("listings")
       .update(payload)
       .eq("id", listingId);
+
     if (error) {
       setError("Error adding frame: " + error.message);
     } else {
@@ -117,7 +146,9 @@ const AddFrame = ({ session }) => {
     }
   };
 
-  if (!listing) return <p className="p-4 text-black">Loading listing details...</p>;
+  if (!listing) {
+    return <p className="p-4 text-black">Loading listing details...</p>;
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-4 text-black">
@@ -172,6 +203,7 @@ const AddFrame = ({ session }) => {
               <div className="mt-2">
                 <button
                   onClick={() => navigator.clipboard.writeText(embedCode)}
+                  type="button"
                   className="bg-green-600 text-white px-4 py-2 rounded"
                 >
                   Copy Code
@@ -180,7 +212,10 @@ const AddFrame = ({ session }) => {
             </div>
           )}
 
-          <button type="submit" className="w-full px-4 py-2 bg-green-600 text-white rounded">
+          <button
+            type="submit"
+            className="w-full px-4 py-2 bg-green-600 text-white rounded"
+          >
             Save New Frame
           </button>
         </form>
@@ -193,6 +228,6 @@ const AddFrame = ({ session }) => {
       </div>
     </div>
   );
-};
+}
 
 export default AddFrame;
