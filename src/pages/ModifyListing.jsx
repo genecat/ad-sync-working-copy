@@ -140,7 +140,7 @@ const ModifyListing = ({ session }) => {
       const size = frameData.size || "Unknown";
       const [width, height] = size.split("x");
       code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
-      code += `  <iframe src="${baseUrl}/serve-ad/${id}?frame=${frameKey}" `;
+      code += `  <iframe src="${baseUrl}/api/serve-ad/listingId?listingId=${id}&frame=${frameKey}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
       code += `</div>\n`;
       code += `<script>\n`;
@@ -187,7 +187,7 @@ const ModifyListing = ({ session }) => {
       const [width, height] = size.split("x");
       let code = `<!-- Ad Exchange Embed Code Start -->\n`;
       code += `<div class="ad-slot" id="ad-slot-${frameKey}">\n`;
-      code += `  <iframe src="${baseUrl}/serve-ad/${id}?frame=${frameKey}" `;
+      code += `  <iframe src="${baseUrl}/api/serve-ad/listingId?listingId=${id}&frame=${frameKey}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
       code += `</div>\n`;
       code += `<script>\n`;
@@ -204,7 +204,7 @@ const ModifyListing = ({ session }) => {
       code += `        }\n`;
       code += `      } catch (error) {\n`;
       code += `        console.error("Error checking ad status:", error);\n`;
-      code += `        adSlot.style.display = "none";\n`;
+ rotate13      code += `        adSlot.style.display = "none";\n`;
       code += `      }\n`;
       code += `    }\n`;
       code += `    checkAdStatus();\n`;
@@ -405,6 +405,5 @@ const ModifyListing = ({ session }) => {
 };
 
 export default ModifyListing;
-
 
 
