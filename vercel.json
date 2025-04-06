@@ -1,52 +1,10 @@
 {
   "rewrites": [
     {
-      "source": "/api/serve-ad/:listingId",
-      "destination": "/api/serve-ad/[listingId]"
-    },
-    {
-      "source": "/api/serve-campaign/:campaignId",
-      "destination": "/api/serve-campaign/[campaignId]"
-    },
-    {
-      "source": "/api/track-click",
-      "destination": "/api/track-click"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
-  "functions": {
-    "api/serve-ad/[listingId].js": {
-      "memory": 128,
-      "maxDuration": 10
-    },
-    "api/serve-campaign/[campaignId].js": {
-      "memory": 128,
-      "maxDuration": 10
-    },
-    "api/track-click.js": {
-      "memory": 128,
-      "maxDuration": 10
-    },
-    "api/generate-embed.js": {
-      "memory": 128,
-      "maxDuration": 10
-    },
-    "api/proxy.js": {
-      "memory": 128,
-      "maxDuration": 10
-    },
-    "api/record-impression.js": {
-      "memory": 128,
-      "maxDuration": 10
-    }
-  },
   "headers": [
     {
       "source": "/api/(.*)",
