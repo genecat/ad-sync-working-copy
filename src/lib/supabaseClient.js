@@ -3,12 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 
 // Supabase configuration
 const SUPABASE_URL = 'https://pczzwgluhgrjuxjadyaq.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0';
+const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MDE2NjQxNCwiZXhwIjoyMDU1NzQyNDE0fQ.jelj5kPitIzSObPgE4mgV4DsZlYLhiKPdfBLP2Gva2s';
 
 // Create a single Supabase client instance for the entire application
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: {
-    persistSession: true, // Ensure sessions are persisted across page reloads
+    persistSession: false, // Disable session persistence to ensure service key is used
   },
   realtime: {
     params: {
