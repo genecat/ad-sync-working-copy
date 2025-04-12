@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 .vercel
 testad3.html
+tsc-errors*.txt
