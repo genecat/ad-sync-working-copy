@@ -47,9 +47,7 @@ export default function CreateCampaign({ session }) {
         return;
       }
 
-      const { data: vacantFrames, error: vacantError } = await supabase
-        .rpc("get_vacant_frames");
-
+      const { data: vacantFrames, error: vacantError } = await supabase.rpc("get_vacant_frames");
       if (vacantError) throw vacantError;
 
       console.log("Vacant Frames:", vacantFrames);
@@ -87,6 +85,35 @@ export default function CreateCampaign({ session }) {
 
       if (parsedData.length === 0) {
         setError("No publishers with vacant frames found for this category.");
+        setPublisherResults([]);
+        return;
+      }
+
+      // Fetch pricing model, price_per_click, and cpm for each frame
+      for (const listing of parsedData) {
+        const { data: framesData, error: framesError } = await supabase
+          .from("frames")
+          .select("frame_id, pricing_model, price_per_click, cpm")
+          .eq("listing_id", listing.id);
+
+        if (framesError) {
+          console.error("Frames error for listing", listing.id, ":", framesError);
+          continue;
+        }
+
+        // Safeguard: Ensure framesData is an array
+        if (!Array.isArray(framesData)) {
+          console.log("framesData is not an array for listing", listing.id, ":", framesData);
+          continue;
+        }
+
+        for (const frame of framesData) {
+          if (listing.selected_frames[frame.frame_id]) {
+            listing.selected_frames[frame.frame_id].pricingModel = frame.pricing_model || "CPC";
+            listing.selected_frames[frame.frame_id].pricePerClick = frame.price_per_click || "0.00";
+            listing.selected_frames[frame.frame_id].cpm = frame.cpm || "0.00";
+          }
+        }
       }
 
       setPublisherResults(parsedData);
@@ -94,6 +121,7 @@ export default function CreateCampaign({ session }) {
     } catch (err) {
       setError("Error fetching publishers: " + err.message);
       console.log("handleSearchPublishers error:", err);
+      setPublisherResults([]);
     }
   }
 
@@ -166,11 +194,15 @@ export default function CreateCampaign({ session }) {
     }
   }
 
-  // ---- UPDATED finalSubmit FUNCTION WITH LOGGING ----
+  // Final submit
   async function finalSubmit() {
     setError(null);
     if (!session || !session.user) {
       setError("User not authenticated.");
+      return;
+    }
+    if (selectedPublishers.length === 0) {
+      setError("No publishers selected.");
       return;
     }
 
@@ -182,11 +214,13 @@ export default function CreateCampaign({ session }) {
         .map(([frameKey]) => frameKey);
 
       for (const frameKey of selectedFrames) {
-        const { data: isVacant, error: validationError } = await supabase
-          .rpc("is_frame_vacant", {
+        const { data: isVacant, error: validationError } = await supabase.rpc(
+          "is_frame_vacant",
+          {
             p_listing_id: pubId,
             p_frame_key: frameKey,
-          });
+          }
+        );
 
         if (validationError) {
           setError("Error validating frame availability: " + validationError.message);
@@ -231,14 +265,16 @@ export default function CreateCampaign({ session }) {
             const frameData = pub.selected_frames?.[frameKey] || {};
             return {
               size: frameData.size || "Unknown Dimensions",
-              pricePerClick: frameData.pricePerClick || "N/A",
+              pricingModel: frameData.pricingModel || "CPC",
+              pricePerClick: frameData.pricePerClick || "0.00",
+              cpm: frameData.cpm || "0.00",
               uploadedFile: publisherDetails[pubId]?.uploads?.[frameKey] || null,
             };
           });
 
         return {
           id: pub.id,
-          publisher_user_id: pub.publisher_user_id, // Add the publisher's user ID
+          publisher_user_id: pub.publisher_user_id,
           url: pub.website || "No URL",
           frames_purchased: purchasedFrames,
           extra_details: publisherDetails[pubId] || {},
@@ -273,6 +309,8 @@ export default function CreateCampaign({ session }) {
               size: frameData.size || "Unknown Dimensions",
               uploaded_file: publisherDetails[pubId]?.uploads?.[frameKey] || null,
               price_per_click: frameData.pricePerClick || "0.00",
+              cpm: frameData.cpm || "0.00",
+              pricing_model: frameData.pricingModel || "CPC",
             };
           });
 
@@ -295,7 +333,6 @@ export default function CreateCampaign({ session }) {
       console.error("Error in finalSubmit:", err);
     }
   }
-  // ---- END UPDATED FUNCTION ----
 
   // Convert file path to public URL
   function getPublicUrl(filePath) {
@@ -365,19 +402,21 @@ export default function CreateCampaign({ session }) {
 
                       {pub.selected_frames && Object.keys(pub.selected_frames).length > 0 && (
                         <div className="ml-6 mt-2">
-                          <strong>Vacant Ad Frames & Prices:</strong>
+                          <strong>Vacant Ad Frames & Pricing:</strong>
                           <ul className="list-disc list-inside">
-                            {Object.entries(pub.selected_frames).map(
-                              ([frameKey, frameData]) => {
-                                const dim = frameData.size || "Unknown Dimensions";
-                                const ppc = frameData.pricePerClick || "0.00";
-                                return (
-                                  <li key={frameKey}>
-                                    {dim} - ${ppc} (Frame: {frameKey})
-                                  </li>
-                                );
-                              }
-                            )}
+                            {Object.entries(pub.selected_frames).map(([frameKey, frameData]) => {
+                              const dim = frameData.size || "Unknown Dimensions";
+                              const pricingModel = frameData.pricingModel || "CPC";
+                              const price =
+                                pricingModel === "CPC"
+                                  ? `$${frameData.pricePerClick || "0.00"} per click`
+                                  : `$${frameData.cpm || "0.00"} CPM`;
+                              return (
+                                <li key={frameKey}>
+                                  {dim} - Pricing Model: {pricingModel} - {price} (Frame: {frameKey})
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       )}
@@ -540,6 +579,11 @@ export default function CreateCampaign({ session }) {
                           {Object.entries(frames).map(([frameKey, frameData]) => {
                             const isChosen = !!publisherDetails[pubId]?.framesChosen?.[frameKey];
                             const size = frameData.size || "Unknown Dimensions";
+                            const pricingModel = frameData.pricingModel || "CPC";
+                            const price =
+                              pricingModel === "CPC"
+                                ? `$${frameData.pricePerClick || "0.00"} per click`
+                                : `$${frameData.cpm || "0.00"} CPM`;
                             return (
                               <li key={frameKey} className="mt-1">
                                 <label className="flex items-center space-x-2">
@@ -552,7 +596,7 @@ export default function CreateCampaign({ session }) {
                                     className="form-checkbox text-blue-500"
                                   />
                                   <span>
-                                    {size} - Price: ${frameData.pricePerClick || "0.00"}
+                                    {size} - Pricing Model: {pricingModel} - {price}
                                   </span>
                                 </label>
                                 {isChosen && (
@@ -601,9 +645,15 @@ export default function CreateCampaign({ session }) {
             <h2 className="text-2xl font-semibold">Step 4: Review Campaign Details</h2>
             <div className="border p-4 rounded shadow bg-gray-50">
               <h3 className="font-bold text-xl mb-2">Campaign Details</h3>
-              <p><strong>Title:</strong> {campaignDetails.title}</p>
-              <p><strong>Budget:</strong> ${campaignDetails.budget}</p>
-              <p><strong>Daily Spend Limit:</strong> ${campaignDetails.dailyLimit}</p>
+              <p>
+                <strong>Title:</strong> {campaignDetails.title}
+              </p>
+              <p>
+                <strong>Budget:</strong> ${campaignDetails.budget}
+              </p>
+              <p>
+                <strong>Daily Spend Limit:</strong> ${campaignDetails.dailyLimit}
+              </p>
               <p>
                 <strong>Target URL:</strong>{" "}
                 {campaignDetails.targetURL ? (
@@ -658,10 +708,14 @@ export default function CreateCampaign({ session }) {
                             const frameData = pub.selected_frames?.[frameKey] || {};
                             const size = frameData.size || "Unknown Dimensions";
                             const uploadedFile = publisherDetails[pubId]?.uploads?.[frameKey];
-                            const ppc = frameData.pricePerClick || "0.00";
+                            const pricingModel = frameData.pricingModel || "CPC";
+                            const price =
+                              pricingModel === "CPC"
+                                ? `$${frameData.pricePerClick || "0.00"} per click`
+                                : `$${frameData.cpm || "0.00"} CPM`;
                             return (
                               <li key={frameKey}>
-                                {size} - Price: ${ppc} (Frame: {frameKey})
+                                {size} - Pricing Model: {pricingModel} - {price} (Frame: {frameKey})
                                 {uploadedFile ? (
                                   <div className="mt-1">
                                     <img
