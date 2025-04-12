@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from "../lib/supabaseClient";
 
-// Initialize Supabase client with your project URL and anon key
-const supabase = createClient(
-  'https://pczzwgluhgrjuxjadyaq.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
-);
-
-function CampaignDashboard() {
+function CampaignDashboard({ session }) {
   const [campaigns, setCampaigns] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,7 +17,13 @@ function CampaignDashboard() {
     try {
       const { data, error } = await supabase
         .from('campaigns')
-        .select('*');
+        .select(`
+          *,
+          impressions (campaign_id, count(*) as impression_count),
+          clicks (campaign_id, count(*) as click_count),
+          frames (frame_id, listing_id, pricing_model, price_per_click, cpm)
+        `)
+        .eq('advertiser_id', session.user.id);
       if (error) {
         console.error('Error fetching campaigns:', error);
         setError(error.message);
@@ -53,39 +53,63 @@ function CampaignDashboard() {
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Daily Limit</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Target URL</th>
                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">End Date</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Impressions</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Clicks</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Pricing Model</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Price</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Total Spent</th>
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((campaign) => (
-                <tr key={campaign.id} className="border-b">
-                  <td className="px-6 py-4 whitespace-nowrap">{campaign.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    ${campaign.campaign_details?.budget || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    ${campaign.campaign_details?.dailyLimit || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {campaign.campaign_details?.targetURL ? (
-                      <a
-                        href={campaign.campaign_details.targetURL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 underline"
-                      >
-                        {campaign.campaign_details.targetURL}
-                      </a>
-                    ) : (
-                      'N/A'
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {campaign.campaign_details?.endDate
-                      ? `${campaign.campaign_details.endDate.year}-${campaign.campaign_details.endDate.month}-${campaign.campaign_details.endDate.day}`
-                      : 'N/A'}
-                  </td>
-                </tr>
-              ))}
+              {campaigns.map((campaign) => {
+                const details = campaign.campaign_details || {};
+                const endDate = details.endDate
+                  ? `${details.endDate.year}-${details.endDate.month}-${details.endDate.day}`
+                  : 'N/A';
+                const impressions = campaign.impressions?.[0]?.impression_count || 0;
+                const clicks = campaign.clicks?.[0]?.click_count || 0;
+                const pricingModel = campaign.frames?.[0]?.pricing_model || "CPC";
+                const pricePerClick = campaign.frames?.[0]?.price_per_click || 0;
+                const cpm = campaign.frames?.[0]?.cpm || 0;
+                const totalSpent = pricingModel === "CPC" 
+                  ? (clicks * pricePerClick).toFixed(2) 
+                  : ((impressions / 1000) * cpm).toFixed(2);
+                const price = pricingModel === "CPC" 
+                  ? `$${pricePerClick.toFixed(2)} per click` 
+                  : `$${cpm.toFixed(2)} CPM`;
+
+                return (
+                  <tr key={campaign.id} className="border-b">
+                    <td className="px-6 py-4 whitespace-nowrap">{campaign.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      ${details.budget || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      ${details.dailyLimit || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {details.targetURL ? (
+                        <a
+                          href={details.targetURL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 underline"
+                        >
+                          {details.targetURL}
+                        </a>
+                      ) : (
+                        'N/A'
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">{endDate}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{impressions}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{clicks}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{pricingModel}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{price}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">${totalSpent}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

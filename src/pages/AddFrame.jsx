@@ -69,20 +69,12 @@ function AddFrame({ session }) {
     setSelectedFrames(updatedFrames);
     setNewFramePrice("");
     setError("");
-
-    // Generate embed code for the newly added frame
     generateCode(listingId, frameKey, updatedFrames);
   };
 
-  /**
-   * generateCode
-   * Builds the HTML embed snippet for a single new frame
-   * so the publisher can paste it into their website.
-   */
   const generateCode = (listingId, frameKey, frames) => {
-    // Our API route is now "/api/serve-ad/listingId"
-    // We'll pass listingId and frameKey as query params
-    const baseUrl = "https://my-ad-agency.vercel.app";
+    // Change the baseUrl to the correct production domain
+    const baseUrl = "https://ad-sync-kqdos6x8j-genecats-projects.vercel.app"; // Updated domain
     const frameData = frames[frameKey];
     if (!frameData) return;
 
@@ -101,7 +93,6 @@ function AddFrame({ session }) {
     code += `    const adSlot = document.getElementById('ad-slot-${frameKey}');\n`;
     code += `    async function checkAdStatus() {\n`;
     code += `      try {\n`;
-    code += `        // We'll call '/api/check-ad-status' to see if the ad is active\n`;
     code += `        const response = await fetch(\`${baseUrl}/api/check-ad-status?listingId=\${listingId}&frameId=\${frameId}\`);\n`;
     code += `        const data = await response.json();\n`;
     code += `        if (!data.isActive) {\n`;
@@ -113,7 +104,6 @@ function AddFrame({ session }) {
     code += `      }\n`;
     code += `    }\n`;
     code += `    checkAdStatus();\n`;
-    code += `    // Re-check the ad status every 5 minutes\n`;
     code += `    setInterval(checkAdStatus, 5 * 60 * 1000);\n`;
     code += `  })();\n`;
     code += `</script>\n`;
@@ -133,7 +123,6 @@ function AddFrame({ session }) {
       selected_frames: selectedFrames,
     };
 
-    // Save updated frames to Supabase
     const { error } = await supabase
       .from("listings")
       .update(payload)
@@ -154,12 +143,9 @@ function AddFrame({ session }) {
     <div className="max-w-4xl mx-auto p-4 text-black">
       <div className="p-8 shadow border border-gray-200 rounded-xl bg-white">
         <h1 className="text-3xl font-bold mb-6">Add New Ad Frame to Listing</h1>
-        <p className="mb-4">
-          <strong>Website:</strong> {listing.website}
-        </p>
+        <p className="mb-4"><strong>Website:</strong> {listing.website}</p>
         {error && <p className="text-red-500 mb-4">{error}</p>}
         {message && <p className="text-green-500 mb-4">{message}</p>}
-
         <form onSubmit={handleSubmit}>
           <div className="mb-6">
             <h2 className="text-xl font-semibold mb-3">Add New Ad Frame</h2>
@@ -170,9 +156,7 @@ function AddFrame({ session }) {
                 className="border p-2 w-full sm:w-1/2 bg-gray-100 text-black rounded"
               >
                 {availableFrames.map((frame) => (
-                  <option key={frame.id} value={frame.size}>
-                    {frame.size}
-                  </option>
+                  <option key={frame.id} value={frame.size}>{frame.size}</option>
                 ))}
               </select>
               <input
@@ -191,7 +175,6 @@ function AddFrame({ session }) {
               Add Frame
             </button>
           </div>
-
           {embedCode && (
             <div className="mb-6">
               <h2 className="text-xl font-semibold mb-2">Your Embed Code:</h2>
@@ -211,15 +194,10 @@ function AddFrame({ session }) {
               </div>
             </div>
           )}
-
-          <button
-            type="submit"
-            className="w-full px-4 py-2 bg-green-600 text-white rounded"
-          >
+          <button type="submit" className="w-full px-4 py-2 bg-green-600 text-white rounded">
             Save New Frame
           </button>
         </form>
-
         <div className="mt-6">
           <Link to="/dashboard" className="text-blue-600 underline">
             Back to Dashboard
@@ -231,3 +209,4 @@ function AddFrame({ session }) {
 }
 
 export default AddFrame;
+

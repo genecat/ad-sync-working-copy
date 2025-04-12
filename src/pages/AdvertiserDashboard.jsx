@@ -33,6 +33,26 @@ function AdvertiserDashboard({ session }) {
     }
   };
 
+  // Calculate average CPM or CPC based on the pricing model
+  const averagePricing = campaigns.reduce(
+    (acc, campaign) => {
+      const frame = campaign.selected_publishers?.[0]?.frames_purchased?.[0];
+      const pricingModel = frame?.pricingModel || "CPC";
+      if (pricingModel === "CPC") {
+        acc.cpcSum += parseFloat(frame?.pricePerClick) || 0;
+        acc.cpcCount += 1;
+      } else {
+        acc.cpmSum += parseFloat(frame?.cpm) || 0;
+        acc.cpmCount += 1;
+      }
+      return acc;
+    },
+    { cpcSum: 0, cpcCount: 0, cpmSum: 0, cpmCount: 0 }
+  );
+
+  const averageCPC = averagePricing.cpcCount > 0 ? averagePricing.cpcSum / averagePricing.cpcCount : 0;
+  const averageCPM = averagePricing.cpmCount > 0 ? averagePricing.cpmSum / averagePricing.cpmCount : 0;
+
   if (isLoading && campaigns.length === 0) { // Only show loading skeleton if no campaigns are loaded
     return (
       <div className="max-w-5xl mx-auto my-10 px-4 bg-modern-bg text-modern-text">
@@ -65,7 +85,8 @@ function AdvertiserDashboard({ session }) {
         {[
           { title: "Total Campaigns", value: stats.totalCampaigns || 0 },
           { title: "Total Clicks", value: stats.totalClicks || 0 },
-          { title: "Avg. Cost Per Click", value: `$${stats.avgCostPerClick?.toFixed(2) || "0.00"}` },
+          { title: "Avg. Cost Per Click", value: `$${averageCPC.toFixed(2)}` },
+          { title: "Avg. CPM", value: `$${averageCPM.toFixed(2)}` },
           { title: "Total Budget", value: `$${stats.totalBudget?.toFixed(2) || "0.00"}` },
           { title: "Total Spent", value: `$${stats.totalSpent?.toFixed(2) || "0.00"}` },
           { title: "Total Remaining", value: `$${stats.totalRemaining?.toFixed(2) || "0.00"}` },
@@ -102,8 +123,10 @@ function AdvertiserDashboard({ session }) {
 
             // Find the frame associated with this campaign
             const frame = campaign.selected_publishers?.[0]?.frames_purchased?.[0];
+            const pricingModel = frame?.pricingModel || "CPC";
             const pricePerClick = frame?.pricePerClick ? parseFloat(frame.pricePerClick) : 0;
-            const totalSpent = (clicks * pricePerClick).toFixed(2);
+            const cpm = frame?.cpm ? parseFloat(frame.cpm) : 0;
+            const totalSpent = pricingModel === "CPC" ? (clicks * pricePerClick).toFixed(2) : ((impressions / 1000) * cpm).toFixed(2);
             const totalRemaining = Math.max(0, budget - totalSpent).toFixed(2);
 
             // Use the uploaded file from the frame, with a fallback
@@ -172,8 +195,12 @@ function AdvertiserDashboard({ session }) {
                         <span className="text-lg">{clicks}</span>
                       </div>
                       <div className="bg-modern-bg shadow-card rounded-lg flex flex-col items-center justify-center text-center">
-                        <strong className="text-sm text-modern-muted">Price Per Click:</strong>
-                        <span className="text-lg">${pricePerClick.toFixed(2)}</span>
+                        <strong className="text-sm text-modern-muted">Pricing Model:</strong>
+                        <span className="text-lg">{pricingModel}</span>
+                      </div>
+                      <div className="bg-modern-bg shadow-card rounded-lg flex flex-col items-center justify-center text-center">
+                        <strong className="text-sm text-modern-muted">{pricingModel === "CPC" ? "Price Per Click:" : "CPM:"}</strong>
+                        <span className="text-lg">${pricingModel === "CPC" ? pricePerClick.toFixed(2) : cpm.toFixed(2)}</span>
                       </div>
                       <div className="bg-modern-bg shadow-card rounded-lg flex flex-col items-center justify-center text-center">
                         <strong className="text-sm text-modern-muted">Total Spent:</strong>

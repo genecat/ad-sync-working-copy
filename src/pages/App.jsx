@@ -1,3 +1,4 @@
+import ServeAd from './ServeAd';
 import React from "react";
 import "../styles/index.css";
 import { supabase } from "../lib/supabaseClient";
@@ -7,13 +8,14 @@ import AuthForm from "./AuthForm";
 import SignUp from "./SignUp";
 import CreateListingFinal from "../components/CreateListingFinal";
 import NewPublisherDashboard from "../components/NewPublisherDashboard";
-import EditListing from "./ModifyListing"; // ✅ Correct path from within src/pages
+import EditListing from "./ModifyListing";
 import AdvertiserDashboard from "./AdvertiserDashboard";
 import CreateCampaign from "./CreateCampaign";
 import CampaignDashboard from "./CampaignDashboard";
 import DashboardLayout from "./DashboardLayout";
 import ArchivePage from "./ArchivePage.jsx";
 import Messages from "./Messages";
+import CheckAdStatus from "./CheckAdStatus";
 
 function App() {
   const [session, setSession] = useState(null);
@@ -282,6 +284,8 @@ function App() {
             )
           }
         />
+        <Route path="/api/check-ad-status" element={<CheckAdStatus />} />
+        <Route path="/api/serve-ad/listingId" element={<ServeAd />} />
       </Routes>
     </BrowserRouter>
   );

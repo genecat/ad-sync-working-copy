@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabaseClient";
 import { Link, useNavigate } from "react-router-dom";
-
-// Single Supabase client
-const supabase = createClient(
-  "https://pczzwgluhgrjuxjadyaq.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0"
-);
 
 const availableFrames = [
   { id: "frame1", size: "300x250" },
@@ -77,8 +71,15 @@ function CreateListingFinal({ session }) {
         return updated;
       }
       const frameInfo = availableFrames.find((f) => f.id === frameId);
-      return { ...prev, [frameId]: { size: frameInfo.size, pricePerClick: "" } };
+      return { ...prev, [frameId]: { size: frameInfo.size, pricingModel: "CPC", pricePerClick: "", cpm: "" } };
     });
+  };
+
+  const handlePricingModelChange = (frameId, model) => {
+    setSelectedFrames((prev) => ({
+      ...prev,
+      [frameId]: { ...prev[frameId], pricingModel: model, pricePerClick: "", cpm: "" },
+    }));
   };
 
   const handlePriceChange = (frameId, value) => {
@@ -88,26 +89,56 @@ function CreateListingFinal({ session }) {
     }));
   };
 
+  const handleCpmChange = (frameId, value) => {
+    setSelectedFrames((prev) => ({
+      ...prev,
+      [frameId]: { ...prev[frameId], cpm: value },
+    }));
+  };
+
   const generateCode = () => {
     if (!currentListingId) {
       setEmbedCode("Please save the listing first to generate the embed code.");
       return;
     }
 
-    const baseUrl = "https://adsync.vendomedia.net/api/serve-active-ad";
+    const baseUrl = "http://localhost:3000/api/serve-ad/listingId";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
     const frameKeys = Object.keys(selectedFrames);
 
-    frameKeys.forEach((frameKey, index) => {
-      const slotId = index + 1; // Increment slotId starting from 1
+    frameKeys.forEach((frameKey) => {
+      const frameId = frameKey;
       const frameData = selectedFrames[frameKey];
       const size = frameData.size || "300x250";
       const [width, height] = size.split("x");
 
-      code += `<div class="ad-slot" id="ad-slot-${slotId}">\n`;
-      code += `  <iframe src="${baseUrl}?listingId=${currentListingId}&slotId=${slotId}" `;
+      code += `<div class="ad-slot" id="ad-slot-${frameId}">\n`;
+      code += `  <iframe src="${baseUrl}?listingId=${currentListingId}&frame=${frameId}" `;
       code += `width="${width}" height="${height}" style="border:none;" frameborder="0"></iframe>\n`;
       code += `</div>\n`;
+
+      code += `<script>\n`;
+      code += `  (function() {\n`;
+      code += `    const listingId = "${currentListingId}";\n`;
+      code += `    const frameId = "${frameId}";\n`;
+      code += `    const adSlot = document.getElementById("ad-slot-${frameId}");\n`;
+      code += `    async function checkAdStatus() {\n`;
+      code += `      try {\n`;
+      code += `        const url = "http://localhost:5173/api/check-ad-status?listingId=" + listingId + "&frameId=" + frameId;\n`;
+      code += `        const response = await fetch(url);\n`;
+      code += `        const data = await response.json();\n`;
+      code += `        if (!data.isActive) {\n`;
+      code += `          adSlot.style.display = "none";\n`;
+      code += `        }\n`;
+      code += `      } catch (error) {\n`;
+      code += `        console.error("Error checking ad status:", error);\n`;
+      code += `        adSlot.style.display = "none";\n`;
+      code += `      }\n`;
+      code += `    }\n`;
+      code += `    checkAdStatus();\n`;
+      code += `    setInterval(checkAdStatus, 5 * 60 * 1000);\n`;
+      code += `  })();\n`;
+      code += `</script>\n`;
     });
 
     code += "<!-- Ad Exchange Embed Code End -->\n";
@@ -128,8 +159,13 @@ function CreateListingFinal({ session }) {
       return;
     }
     for (const frameId in selectedFrames) {
-      if (!selectedFrames[frameId].pricePerClick) {
-        setSaveMessage(`Please enter a price for frame ${frameId}.`);
+      const frame = selectedFrames[frameId];
+      if (frame.pricingModel === "CPC" && !frame.pricePerClick) {
+        setSaveMessage(`Please enter a price per click for frame ${frameId}.`);
+        return;
+      }
+      if (frame.pricingModel === "CPM" && !frame.cpm) {
+        setSaveMessage(`Please enter a CPM for frame ${frameId}.`);
         return;
       }
     }
@@ -143,7 +179,6 @@ function CreateListingFinal({ session }) {
     };
 
     try {
-      // Check if a listing already exists for the website
       const { data: existingListing, error: fetchError } = await supabase
         .from("listings")
         .select("id, selected_frames")
@@ -155,8 +190,8 @@ function CreateListingFinal({ session }) {
         throw new Error("Error checking existing listing: " + fetchError.message);
       }
 
+      let updatedListingId;
       if (existingListing) {
-        // Listing exists, update it by merging the new frames
         const existingFrames = existingListing.selected_frames || {};
         const updatedFrames = { ...existingFrames, ...selectedFrames };
 
@@ -174,16 +209,14 @@ function CreateListingFinal({ session }) {
           throw new Error("Error updating listing: " + updateError.message);
         }
         setSaveMessage("Listing updated successfully!");
-        const updatedListingId = existingListing.id;
+        updatedListingId = existingListing.id;
         setCurrentListingId(updatedListingId);
         setListings((prev) =>
           prev.map((listing) =>
             listing.id === updatedListingId ? { ...listing, selected_frames: updatedFrames, category: listingDetails.category, title: listingDetails.title } : listing
           )
         );
-        generateCode();
       } else {
-        // No existing listing, create a new one
         const { data, error: insertError } = await supabase
           .from("listings")
           .insert([payload])
@@ -193,12 +226,57 @@ function CreateListingFinal({ session }) {
           throw new Error("Error creating listing: " + insertError.message);
         }
         setSaveMessage("Listing created successfully!");
-        const newListingId = data[0].id;
-        setCurrentListingId(newListingId);
+        updatedListingId = data[0].id;
+        setCurrentListingId(updatedListingId);
         setListings((prev) => [...prev, data[0]]);
-        generateCode();
       }
 
+      // Insert or update frames in the frames table
+      for (const frameId in selectedFrames) {
+        const frameData = selectedFrames[frameId];
+        const { data: existingFrame, error: fetchFrameError } = await supabase
+          .from("frames")
+          .select("frame_id")
+          .eq("frame_id", frameId)
+          .eq("listing_id", updatedListingId)
+          .single();
+
+        if (fetchFrameError && fetchFrameError.code !== "PGRST116") {
+          throw new Error("Error checking existing frame: " + fetchFrameError.message);
+        }
+
+        if (existingFrame) {
+          const { error: updateFrameError } = await supabase
+            .from("frames")
+            .update({
+              price_per_click: frameData.pricingModel === "CPC" ? parseFloat(frameData.pricePerClick) : 0,
+              cpm: frameData.pricingModel === "CPM" ? parseFloat(frameData.cpm) : 0,
+              pricing_model: frameData.pricingModel,
+            })
+            .eq("frame_id", frameId)
+            .eq("listing_id", updatedListingId);
+
+          if (updateFrameError) {
+            throw new Error("Error updating frame: " + updateFrameError.message);
+          }
+        } else {
+          const { error: insertFrameError } = await supabase
+            .from("frames")
+            .insert({
+              frame_id: frameId,
+              listing_id: updatedListingId,
+              price_per_click: frameData.pricingModel === "CPC" ? parseFloat(frameData.pricePerClick) : 0,
+              cpm: frameData.pricingModel === "CPM" ? parseFloat(frameData.cpm) : 0,
+              pricing_model: frameData.pricingModel,
+            });
+
+          if (insertFrameError) {
+            throw new Error("Error inserting frame: " + insertFrameError.message);
+          }
+        }
+      }
+
+      generateCode();
       setListingDetails({ title: "", category: "", website: "" });
       setSelectedFrames({});
     } catch (err) {
@@ -276,19 +354,52 @@ function CreateListingFinal({ session }) {
                   </label>
                 </div>
                 {isSelected && (
-                  <div className="ml-7">
-                    <label className="block text-sm text-gray-600">
-                      Price per Click ($):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={selectedFrames[frame.id].pricePerClick}
-                      onChange={(e) => handlePriceChange(frame.id, e.target.value)}
-                      className="border p-1 w-full bg-gray-100 text-black rounded"
-                      placeholder="e.g., 0.50"
-                    />
+                  <div className="ml-7 space-y-2">
+                    <div>
+                      <label className="block text-sm text-gray-600">
+                        Select Pricing Model for this Ad Frame:
+                      </label>
+                      <select
+                        value={selectedFrames[frame.id].pricingModel}
+                        onChange={(e) => handlePricingModelChange(frame.id, e.target.value)}
+                        className="border p-1 w-full bg-gray-100 text-black rounded"
+                      >
+                        <option value="CPC">CPC (Cost Per Click)</option>
+                        <option value="CPM">CPM (Cost Per 1,000 Impressions)</option>
+                      </select>
+                    </div>
+                    {selectedFrames[frame.id].pricingModel === "CPC" && (
+                      <div>
+                        <label className="block text-sm text-gray-600">
+                          Price per Click ($):
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={selectedFrames[frame.id].pricePerClick}
+                          onChange={(e) => handlePriceChange(frame.id, e.target.value)}
+                          className="border p-1 w-full bg-gray-100 text-black rounded"
+                          placeholder="e.g., 0.50"
+                        />
+                      </div>
+                    )}
+                    {selectedFrames[frame.id].pricingModel === "CPM" && (
+                      <div>
+                        <label className="block text-sm text-gray-600">
+                          CPM ($):
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={selectedFrames[frame.id].cpm}
+                          onChange={(e) => handleCpmChange(frame.id, e.target.value)}
+                          className="border p-1 w-full bg-gray-100 text-black rounded"
+                          placeholder="e.g., 10.00"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -370,19 +481,22 @@ function CreateListingFinal({ session }) {
                 <div className="mt-2">
                   <strong>Ad Frames:</strong>{" "}
                   {listing.selected_frames &&
-                    Object.keys(listing.selected_frames).map((key) => (
-                      <span
-                        key={key}
-                        className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2"
-                      >
-                        {listing.selected_frames[key].size} - $
-                        {listing.selected_frames[key].pricePerClick || "N/A"} per click
-                      </span>
-                    ))}
+                    Object.keys(listing.selected_frames).map((key) => {
+                      const frame = listing.selected_frames[key];
+                      return (
+                        <span
+                          key={key}
+                          className="inline-block bg-gray-100 text-black px-2 py-1 rounded mr-2"
+                        >
+                          {frame.size} - {frame.pricingModel}: $
+                          {frame.pricingModel === "CPC" ? frame.pricePerClick || "N/A" : frame.cpm || "N/A"}
+                        </span>
+                      );
+                    })}
                 </div>
                 <div className="mt-4">
                   <Link
-                    to={`/modify-listing/${listing.id}`}
+                    to={`/edit-listing/${listing.id}`}
                     className="px-4 py-2 bg-blue-600 text-white rounded"
                   >
                     Modify Listing
@@ -398,38 +512,6 @@ function CreateListingFinal({ session }) {
 }
 
 export default CreateListingFinal;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

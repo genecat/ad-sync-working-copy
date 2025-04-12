@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  'https://pczzwgluhgrjuxjadyaq.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjenp3Z2x1aGdyanV4amFkeWFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNjY0MTQsImV4cCI6MjA1NTc0MjQxNH0.dpVupxUEf8be6aMG8jJZFduezZjaveCnUhI9p7G7ud0'
-);
+import { supabase } from "../lib/supabaseClient";
 
 const availableFrames = [
   { id: "frame1", size: "300x250" },
@@ -25,6 +20,8 @@ const ModifyListing = ({ session }) => {
   const [message, setMessage] = useState('');
   const [newFrameSize, setNewFrameSize] = useState(availableFrames[0].size);
   const [newFramePrice, setNewFramePrice] = useState('');
+  const [newFrameCpm, setNewFrameCpm] = useState('');
+  const [newFramePricingModel, setNewFramePricingModel] = useState('CPC');
   const [embedCode, setEmbedCode] = useState('');
   const [selectedFrameToCopy, setSelectedFrameToCopy] = useState('all');
 
@@ -82,6 +79,22 @@ const ModifyListing = ({ session }) => {
     fetchListing();
   }, [id, session]);
 
+  const handleFramePricingModelChange = (frameKey, model) => {
+    setSelectedFrames((prev) => {
+      const updatedFrames = {
+        ...prev,
+        [frameKey]: {
+          ...prev[frameKey],
+          pricingModel: model,
+          pricePerClick: model === "CPC" ? prev[frameKey].pricePerClick : "",
+          cpm: model === "CPM" ? prev[frameKey].cpm : "",
+        },
+      };
+      generateCode(updatedFrames);
+      return updatedFrames;
+    });
+  };
+
   const handleFramePriceChange = (frameKey, newPrice) => {
     setSelectedFrames((prev) => {
       const updatedFrames = {
@@ -96,24 +109,45 @@ const ModifyListing = ({ session }) => {
     });
   };
 
-  const addFrame = (size, price) => {
-    console.log("Adding new frame - Size:", size, "Price:", price);
-    if (!price) {
+  const handleFrameCpmChange = (frameKey, newCpm) => {
+    setSelectedFrames((prev) => {
+      const updatedFrames = {
+        ...prev,
+        [frameKey]: {
+          ...prev[frameKey],
+          cpm: newCpm,
+        },
+      };
+      generateCode(updatedFrames);
+      return updatedFrames;
+    });
+  };
+
+  const addFrame = (size, price, cpm, pricingModel) => {
+    console.log("Adding new frame - Size:", size, "Price:", price, "CPM:", cpm, "Pricing Model:", pricingModel);
+    if (pricingModel === "CPC" && !price) {
       console.error("No price provided for new frame");
       setError('Please enter a price per click for the new frame.');
+      return;
+    }
+    if (pricingModel === "CPM" && !cpm) {
+      console.error("No CPM provided for new frame");
+      setError('Please enter a CPM for the new frame.');
       return;
     }
     const frameKey = `frame${Date.now()}`;
     setSelectedFrames((prev) => {
       const updatedFrames = {
         ...prev,
-        [frameKey]: { size, pricePerClick: price },
+        [frameKey]: { size, pricingModel, pricePerClick: pricingModel === "CPC" ? price : "", cpm: pricingModel === "CPM" ? cpm : "" },
       };
       console.log("Updated selectedFrames after adding:", updatedFrames);
       generateCode(updatedFrames);
       return updatedFrames;
     });
     setNewFramePrice('');
+    setNewFrameCpm('');
+    setNewFramePricingModel('CPC');
     setError('');
   };
 
@@ -133,7 +167,7 @@ const ModifyListing = ({ session }) => {
       setError("Cannot generate embed code: Invalid listing ID");
       return;
     }
-    const baseUrl = "https://my-ad-agency.vercel.app";
+    const baseUrl = "https://e798-2603-800c-2a00-c0bf-7530-1b73-c61-8795.ngrok-free.app";
     let code = "<!-- Ad Exchange Embed Code Start -->\n";
     Object.keys(frames).forEach((frameKey) => {
       const frameData = frames[frameKey];
@@ -175,7 +209,7 @@ const ModifyListing = ({ session }) => {
       setError("Cannot generate embed code: Invalid listing ID");
       return;
     }
-    const baseUrl = "https://my-ad-agency.vercel.app";
+    const baseUrl = "https://e798-2603-800c-2a00-c0bf-7530-1b73-c61-8795.ngrok-free.app";
     if (selectedFrameToCopy === 'all') {
       generateCode(selectedFrames);
       return;
@@ -225,18 +259,70 @@ const ModifyListing = ({ session }) => {
     };
     try {
       console.log("Sending update to Supabase with ID:", id, "Payload:", payload);
-      const { error } = await supabase
+      const { error: updateListingError } = await supabase
         .from('listings')
         .update(payload)
         .eq('id', id);
-      if (error) {
-        console.error('Supabase update error:', error);
-        throw new Error('Error updating listing: ' + error.message);
+      if (updateListingError) {
+        console.error('Supabase update error:', updateListingError);
+        throw new Error('Error updating listing: ' + updateListingError.message);
       }
+
+      // Update frames in the frames table
+      for (const frameKey in selectedFrames) {
+        const frameData = selectedFrames[frameKey];
+        console.log('Processing frame:', frameKey, 'with data:', frameData);
+        const { data: existingFrame, error: fetchFrameError } = await supabase
+          .from("frames")
+          .select("frame_id")
+          .eq("frame_id", frameKey)
+          .eq("listing_id", id)
+          .single();
+
+        if (fetchFrameError && fetchFrameError.code !== "PGRST116") {
+          console.error('Error checking existing frame:', fetchFrameError);
+          throw new Error("Error checking existing frame: " + fetchFrameError.message);
+        }
+
+        if (existingFrame) {
+          console.log('Updating existing frame:', frameKey);
+          const { error: updateFrameError } = await supabase
+            .from("frames")
+            .update({
+              price_per_click: frameData.pricingModel === "CPC" ? parseFloat(frameData.pricePerClick) : 0,
+              cpm: frameData.pricingModel === "CPM" ? parseFloat(frameData.cpm) : 0,
+              pricing_model: frameData.pricingModel,
+            })
+            .eq("frame_id", frameKey)
+            .eq("listing_id", id);
+
+          if (updateFrameError) {
+            console.error('Error updating frame:', updateFrameError);
+            throw new Error("Error updating frame: " + updateFrameError.message);
+          }
+        } else {
+          console.log('Inserting new frame:', frameKey);
+          const { error: insertFrameError } = await supabase
+            .from("frames")
+            .insert({
+              frame_id: frameKey,
+              listing_id: id,
+              price_per_click: frameData.pricingModel === "CPC" ? parseFloat(frameData.pricePerClick) : 0,
+              cpm: frameData.pricingModel === "CPM" ? parseFloat(frameData.cpm) : 0,
+              pricing_model: frameData.pricingModel,
+            });
+
+          if (insertFrameError) {
+            console.error('Error inserting frame:', insertFrameError);
+            throw new Error("Error inserting frame: " + insertFrameError.message);
+          }
+        }
+      }
+
       console.log("Update successful, setting success message");
       setMessage('Listing updated successfully!');
       console.log("Listing updated successfully with payload:", payload);
-      generateCode(selectedFrames);
+      generateCodeForSelected(); // Auto-generate embed code after saving
     } catch (err) {
       console.error("Submit error:", err);
       setError(err.message || 'Failed to save listing. Please try again.');
@@ -296,14 +382,38 @@ const ModifyListing = ({ session }) => {
                     <strong>Frame #{index + 1}:</strong> {frameKey} - Size: {selectedFrames[frameKey].size}
                   </p>
                   <label className="block mb-2">
-                    Price per Click:
-                    <input
-                      type="number"
-                      value={selectedFrames[frameKey].pricePerClick}
-                      onChange={(e) => handleFramePriceChange(frameKey, e.target.value)}
+                    Pricing Model:
+                    <select
+                      value={selectedFrames[frameKey].pricingModel || "CPC"}
+                      onChange={(e) => handleFramePricingModelChange(frameKey, e.target.value)}
                       className="ml-2 border p-1 bg-gray-100 text-black rounded"
-                    />
+                    >
+                      <option value="CPC">CPC (Cost Per Click)</option>
+                      <option value="CPM">CPM (Cost Per 1,000 Impressions)</option>
+                    </select>
                   </label>
+                  {selectedFrames[frameKey].pricingModel === "CPC" && (
+                    <label className="block mb-2">
+                      Price per Click:
+                      <input
+                        type="number"
+                        value={selectedFrames[frameKey].pricePerClick}
+                        onChange={(e) => handleFramePriceChange(frameKey, e.target.value)}
+                        className="ml-2 border p-1 bg-gray-100 text-black rounded"
+                      />
+                    </label>
+                  )}
+                  {selectedFrames[frameKey].pricingModel === "CPM" && (
+                    <label className="block mb-2">
+                      CPM:
+                      <input
+                        type="number"
+                        value={selectedFrames[frameKey].cpm || ''}
+                        onChange={(e) => handleFrameCpmChange(frameKey, e.target.value)}
+                        className="ml-2 border p-1 bg-gray-100 text-black rounded"
+                      />
+                    </label>
+                  )}
                   <button
                     type="button"
                     onClick={() => removeFrame(frameKey)}
@@ -322,7 +432,7 @@ const ModifyListing = ({ session }) => {
                 <select
                   value={newFrameSize}
                   onChange={(e) => setNewFrameSize(e.target.value)}
-                  className="border p-2 w-full sm:w-1/2 bg-gray-100 text-black rounded"
+                  className="border p-2 w-full sm:w-1/4 bg-gray-100 text-black rounded"
                 >
                   {availableFrames.map((frame) => (
                     <option key={frame.id} value={frame.size}>
@@ -330,23 +440,46 @@ const ModifyListing = ({ session }) => {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  value={newFramePrice}
-                  onChange={(e) => setNewFramePrice(e.target.value)}
-                  placeholder="Price per Click"
-                  className="border p-2 w-full sm:w-1/2 bg-gray-100 text-black rounded"
-                />
+                <select
+                  value={newFramePricingModel}
+                  onChange={(e) => setNewFramePricingModel(e.target.value)}
+                  className="border p-2 w-full sm:w-1/4 bg-gray-100 text-black rounded"
+                >
+                  <option value="CPC">CPC (Cost Per Click)</option>
+                  <option value="CPM">CPM (Cost Per 1,000 Impressions)</option>
+                </select>
+                {newFramePricingModel === "CPC" && (
+                  <input
+                    type="number"
+                    value={newFramePrice}
+                    onChange={(e) => setNewFramePrice(e.target.value)}
+                    placeholder="Price per Click"
+                    className="border p-2 w-full sm:w-1/4 bg-gray-100 text-black rounded"
+                  />
+                )}
+                {newFramePricingModel === "CPM" && (
+                  <input
+                    type="number"
+                    value={newFrameCpm}
+                    onChange={(e) => setNewFrameCpm(e.target.value)}
+                    placeholder="CPM"
+                    className="border p-2 w-full sm:w-1/4 bg-gray-100 text-black rounded"
+                  />
+                )}
               </div>
               <button
                 type="button"
-                onClick={() => addFrame(newFrameSize, newFramePrice)}
+                onClick={() => addFrame(newFrameSize, newFramePrice, newFrameCpm, newFramePricingModel)}
                 className="px-4 py-2 bg-blue-600 text-white rounded"
               >
                 Add New Frame
               </button>
             </div>
           </div>
+
+          <button type="submit" className="w-full px-4 py-2 bg-green-600 text-white rounded mb-6">
+            Save Modifications
+          </button>
 
           <div className="mt-6">
             <label className="block mb-2 font-semibold">Select Frame to Copy:</label>
@@ -388,10 +521,6 @@ const ModifyListing = ({ session }) => {
               </div>
             )}
           </div>
-
-          <button type="submit" className="w-full px-4 py-2 bg-green-600 text-white rounded">
-            Save Modifications
-          </button>
         </form>
 
         <div className="mt-6">
@@ -405,5 +534,3 @@ const ModifyListing = ({ session }) => {
 };
 
 export default ModifyListing;
-
-
